@@ -2052,3 +2052,268 @@ input:checked + .switch-track-video { background: #3B82F6; }
 @media (min-width: 1280px) {
   .app-main { max-width: 1280px; }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   HOLOS · Adiciones Fase 1.1
+   Toggle vista (grid/lista), paginación, filtro por mentor, lista compacta.
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Toggle vista grid/lista ── */
+.view-toggle {
+  display: inline-flex;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.view-toggle-btn {
+  background: transparent;
+  border: none;
+  padding: 6px 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: var(--transition);
+}
+.view-toggle-btn:hover { color: var(--text-primary); }
+.view-toggle-btn.active {
+  background: var(--accent);
+  color: white;
+}
+.view-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ── Barra de resultados + paginación ── */
+.results-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 12px 0 4px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.results-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.pagination {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+.pagination button {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 5px 10px;
+  cursor: pointer;
+  font-family: var(--font-body);
+  min-width: 30px;
+  transition: var(--transition);
+}
+.pagination button:hover:not(:disabled):not(.active) {
+  border-color: var(--accent);
+  color: var(--accent-dark);
+}
+.pagination button.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.pagination button:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+.pagination .pag-info {
+  padding: 0 8px;
+  color: var(--text-secondary);
+}
+
+/* ── Modo LISTA (tabla densa) ── */
+.cards-grid.mode-list {
+  grid-template-columns: 1fr;
+  gap: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.cards-grid.mode-list .alumno-card {
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 14px;
+  box-shadow: none;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr auto;
+  align-items: center;
+  gap: 12px;
+  transform: none;
+}
+.cards-grid.mode-list .alumno-card:last-child { border-bottom: none; }
+.cards-grid.mode-list .alumno-card:hover {
+  background: var(--bg-input);
+  transform: none;
+}
+.cards-grid.mode-list .alumno-card-head {
+  margin-bottom: 0;
+  flex-direction: row;
+}
+.cards-grid.mode-list .alumno-card-name {
+  font-size: 14px;
+  font-family: var(--font-body);
+  font-weight: 600;
+}
+.cards-grid.mode-list .alumno-card-meta {
+  font-size: 12px;
+  line-height: 1.35;
+}
+.cards-grid.mode-list .alumno-card-meta br { display: none; }
+.cards-grid.mode-list .alumno-card-meta span.sep { color: var(--border); margin: 0 6px; }
+
+/* En mobile la lista se compacta más */
+@media (max-width: 599px) {
+  .cards-grid.mode-list .alumno-card {
+    grid-template-columns: 1fr auto;
+  }
+  .cards-grid.mode-list .list-col-mentor,
+  .cards-grid.mode-list .list-col-fecha {
+    display: none;
+  }
+}
+
+
+
+/* ═══════════════════════════════════════════════════════════════
+   HOLOS · Adiciones Fase 1.2
+   Soft delete: chip eliminados, modal confirm, etiqueta "quitado",
+   alumno-card "fantasma" para mentor.
+═══════════════════════════════════════════════════════════════ */
+
+/* Chip de eliminados — gris oscuro discreto */
+.chip-eliminados {
+  border-color: var(--border) !important;
+  color: #8B6F5A !important;
+}
+.chip-eliminados.active {
+  background: #6B5544 !important;
+  color: #FAF7F2 !important;
+  border-color: #6B5544 !important;
+}
+
+/* Botón danger primario (acciones destructivas) */
+.btn-danger {
+  background: #B85450;
+  color: white;
+  border: 1px solid #B85450;
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: var(--transition);
+}
+.btn-danger:hover { background: #A04540; border-color: #A04540; }
+.btn-danger:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Modal pequeño (para confirmaciones) */
+.modal-card-small {
+  max-width: 440px;
+  width: 100%;
+}
+.modal-card-small .modal-body {
+  text-align: center;
+  padding: 24px 20px;
+}
+.confirm-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  line-height: 1;
+}
+.confirm-text {
+  font-size: 15px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+.confirm-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  padding: 12px;
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+#confirm-input {
+  width: 100%;
+  margin-top: 14px;
+  text-align: center;
+  font-family: monospace;
+  font-size: 16px;
+  letter-spacing: 2px;
+  font-weight: 600;
+  padding: 12px;
+  border: 2px solid #B85450;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+}
+#confirm-input:focus { outline: none; box-shadow: 0 0 0 3px rgba(184,84,80,.15); }
+.confirm-hint code {
+  background: var(--bg-card);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-weight: 600;
+  color: #B85450;
+}
+.confirm-text code {
+  background: var(--bg-card);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-weight: 600;
+  color: #B85450;
+}
+
+/* Etiqueta "Quitado de las mentorías" — para la vista del mentor */
+.alumno-card-tag.tag-eliminado {
+  background: #FBEDEB;
+  color: #B85450;
+  border: 1px dashed #B85450;
+}
+/* Tarjeta del alumno eliminado se ve atenuada */
+.alumno-card.is-eliminado {
+  opacity: .65;
+  background: linear-gradient(0deg, var(--bg-input), var(--bg-card));
+  position: relative;
+}
+.alumno-card.is-eliminado .alumno-card-name {
+  text-decoration: line-through;
+  text-decoration-color: rgba(0,0,0,.3);
+}
+.alumno-card.is-eliminado .alumno-removed-banner {
+  display: block;
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: #FBEDEB;
+  border-left: 3px solid #B85450;
+  color: #8B3530;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.alumno-removed-banner { display: none; }
+

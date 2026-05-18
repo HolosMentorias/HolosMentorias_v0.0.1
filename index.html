@@ -69,6 +69,16 @@
         <h1>Crear<br/><em>cuenta</em></h1>
       </div>
       <p class="login-tagline">Tu cuenta se crea sin rol. Un administrador te asignará uno.</p>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Nombre *</label>
+          <input type="text" id="reg-nombre" placeholder="Ana" autocomplete="given-name" />
+        </div>
+        <div class="form-group">
+          <label>Apellido *</label>
+          <input type="text" id="reg-apellido" placeholder="García" autocomplete="family-name" />
+        </div>
+      </div>
       <div class="form-group">
         <label>Email</label>
         <input type="email" id="reg-email" placeholder="tu@email.com" autocomplete="email" />
@@ -180,6 +190,10 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
           Mentores
         </button>
+        <button class="nav-tab" data-view="admin-usuarios" data-role="admin">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+          Usuarios
+        </button>
         <!-- Super admin -->
         <button class="nav-tab" data-view="super-usuarios" data-role="super_admin">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
@@ -232,7 +246,20 @@
               <option value="nombre">Nombre A-Z</option>
               <option value="ultimo">Último contacto</option>
             </select>
+            <div class="view-toggle" role="group" aria-label="Modo de visualización">
+              <button class="view-toggle-btn active" data-view-mode="grid" id="mnt-view-grid" title="Tarjetas" aria-label="Tarjetas">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+              </button>
+              <button class="view-toggle-btn" data-view-mode="list" id="mnt-view-list" title="Lista" aria-label="Lista">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+              </button>
+            </div>
           </div>
+        </div>
+
+        <div class="results-bar">
+          <span id="mnt-results-count" class="results-count">—</span>
+          <div class="pagination" id="mnt-pagination"></div>
         </div>
 
         <section class="cards-grid" id="cards-grid">
@@ -264,6 +291,7 @@
             <button class="chip" data-filter="asignados">Asignados</button>
             <button class="chip" data-filter="sin-asignar">Sin asignar</button>
             <button class="chip chip-baja" data-filter="baja">Bajas</button>
+            <button class="chip chip-eliminados" data-filter="eliminados">Eliminados</button>
           </div>
           <button class="btn-new" id="btn-admin-new-alumno">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -274,8 +302,30 @@
         <div class="search-controls-row">
           <div class="search-wrap">
             <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="adm-search-alumnos" placeholder="Buscar alumno por nombre, mentor..." />
+            <input type="text" id="adm-search-alumnos" placeholder="Buscar alumno, mentor, teléfono..." />
           </div>
+          <select id="adm-filter-mentor" class="sort-select" title="Filtrar por mentor">
+            <option value="">Todos los mentores</option>
+          </select>
+          <select id="adm-sort" class="sort-select" title="Ordenar">
+            <option value="reciente">Más reciente</option>
+            <option value="apellido">Apellido A-Z</option>
+            <option value="ultimo">Último contacto</option>
+            <option value="mentor">Por mentor</option>
+          </select>
+          <div class="view-toggle" role="group" aria-label="Modo de visualización">
+            <button class="view-toggle-btn active" data-view-mode="grid" id="adm-view-grid" title="Tarjetas" aria-label="Tarjetas">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            </button>
+            <button class="view-toggle-btn" data-view-mode="list" id="adm-view-list" title="Lista" aria-label="Lista">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="results-bar">
+          <span id="adm-results-count" class="results-count">—</span>
+          <div class="pagination" id="adm-pagination"></div>
         </div>
 
         <section class="cards-grid" id="admin-alumnos-grid">
@@ -300,6 +350,40 @@
 
         <section class="mentor-grid" id="admin-mentores-grid">
           <div class="loading-state"><div class="spinner"></div><p>Cargando mentores...</p></div>
+        </section>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════
+           VISTA ADMIN · "Usuarios"  (más simple que la del super:
+           el admin sólo asigna admin/mentor, no toca super_admins
+           ni puede activar/desactivar)
+      ═══════════════════════════════════════════════ -->
+      <section class="view hidden" data-view-pane="admin-usuarios">
+        <section class="stats-row">
+          <div class="stat-card"><span class="stat-num" id="admU-stat-total">0</span><span class="stat-label">Usuarios</span></div>
+          <div class="stat-card stat-active"><span class="stat-num" id="admU-stat-admins">0</span><span class="stat-label">Admins</span></div>
+          <div class="stat-card stat-active"><span class="stat-num" id="admU-stat-mentores">0</span><span class="stat-label">Mentores</span></div>
+          <div class="stat-card stat-warn"><span class="stat-num" id="admU-stat-pendientes">0</span><span class="stat-label">Sin rol</span></div>
+        </section>
+
+        <section class="controls-row">
+          <div class="filter-chips" id="admU-filter-chips">
+            <button class="chip active" data-filter="all">Todos</button>
+            <button class="chip" data-filter="admin">Admins</button>
+            <button class="chip" data-filter="mentor">Mentores</button>
+            <button class="chip chip-baja" data-filter="sin-rol">Sin rol</button>
+          </div>
+        </section>
+
+        <div class="search-controls-row">
+          <div class="search-wrap">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="admU-search-users" placeholder="Buscar usuario por nombre o email..." />
+          </div>
+        </div>
+
+        <section class="users-list" id="admin-users-list">
+          <div class="loading-state"><div class="spinner"></div><p>Cargando usuarios...</p></div>
         </section>
       </section>
 
@@ -487,8 +571,54 @@
         </div>
       </div>
       <div class="modal-footer">
+        <button class="btn-danger hidden" id="btn-eliminar-alumno">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          Eliminar
+        </button>
+        <button class="btn-secondary hidden" id="btn-restaurar-alumno">Restaurar</button>
+        <div style="flex:1"></div>
         <button class="btn-secondary" id="btn-cancel">Cancelar</button>
         <button class="btn-primary" id="btn-save">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       MODAL · Confirmación de eliminación de alumno (doble paso)
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay hidden" id="modal-confirm-delete">
+    <div class="modal-card modal-card-small">
+      <div class="modal-header">
+        <h2 id="confirm-title">Eliminar alumno</h2>
+        <button class="btn-icon" id="confirm-close" aria-label="Cerrar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- Paso 1 -->
+        <div id="confirm-step-1">
+          <div class="confirm-icon">⚠️</div>
+          <p class="confirm-text">
+            Vas a eliminar a <strong id="confirm-alumno-name">—</strong> de las mentorías.
+          </p>
+          <p class="confirm-hint">
+            El registro <strong>no se borra</strong> definitivamente: queda archivado y el mentor
+            verá una etiqueta de que el alumno fue quitado. Podés restaurarlo después si fue un error.
+          </p>
+        </div>
+        <!-- Paso 2 -->
+        <div id="confirm-step-2" class="hidden">
+          <div class="confirm-icon">🛑</div>
+          <p class="confirm-text">
+            <strong>Confirmación final.</strong> Escribí <code>ELIMINAR</code> abajo para confirmar.
+          </p>
+          <input type="text" id="confirm-input" placeholder="ELIMINAR" autocomplete="off" autocapitalize="characters" />
+          <p id="confirm-error" class="error-msg hidden"></p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="confirm-cancel">Cancelar</button>
+        <button class="btn-danger" id="confirm-next">Continuar</button>
       </div>
     </div>
   </div>

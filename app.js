@@ -17,9 +17,6 @@ if (!CFG || !CFG.SUPABASE_URL || CFG.SUPABASE_ANON_KEY === 'REEMPLAZAR_EN_BUILD'
 const { createClient } = window.supabase;
 const db = createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
 
-// URL de la Edge Function para operaciones de super_admin
-const EDGE_FN_URL = `${CFG.SUPABASE_URL}/functions/v1/admin-operations`;
-
 /* ───────────────────────────────────────────────────────────────
    2. ESTADO GLOBAL
 ─────────────────────────────────────────────────────────────── */
@@ -37,12 +34,23 @@ const state = {
   mentorFilter: 'all',
   mentorSearch: '',
   mentorSort: 'reciente',
+  mentorViewMode: 'grid',     // 'grid' | 'list'
+  mentorPage: 1,
   adminAlumnoFilter: 'all',
   adminAlumnoSearch: '',
+  adminAlumnoMentor: '',      // mentor id, '' = todos
+  adminAlumnoSort: 'reciente',
+  adminAlumnoViewMode: 'grid',
+  adminAlumnoPage: 1,
   adminMentorSearch: '',
+  adminUsers: [],
+  adminUsersFilter: 'all',
+  adminUsersSearch: '',
   superFilter: 'all',
   superSearch: '',
 };
+
+const PAGE_SIZE = 50;          // alumnos por página
 
 /* ───────────────────────────────────────────────────────────────
    3. UTILS GENERALES
@@ -88,6 +96,39 @@ function initials(p) {
   const a = (p.nombre || p.email || '?')[0];
   const b = (p.apellido || '')[0] || '';
   return (a + b).toUpperCase();
+}
+
+/** Renderiza una paginación simple: « 1 2 ... 5 ». Devuelve el slice visible. */
+function paginate(list, page, containerId, onPageChange) {
+  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const start = (safePage - 1) * PAGE_SIZE;
+  const slice = list.slice(start, start + PAGE_SIZE);
+
+  const cont = document.getElementById(containerId);
+  if (cont) {
+    if (totalPages <= 1) {
+      cont.innerHTML = '';
+    } else {
+      const btns = [];
+      btns.push(`<button ${safePage === 1 ? 'disabled' : ''} data-page="${safePage-1}">‹</button>`);
+      // Páginas a mostrar: siempre 1, vecinas de actual, y última
+      const pages = new Set([1, totalPages, safePage, safePage-1, safePage+1]);
+      const visible = [...pages].filter(p => p >= 1 && p <= totalPages).sort((a,b)=>a-b);
+      let prev = 0;
+      for (const p of visible) {
+        if (p - prev > 1) btns.push(`<span class="pag-info">…</span>`);
+        btns.push(`<button class="${p === safePage ? 'active' : ''}" data-page="${p}">${p}</button>`);
+        prev = p;
+      }
+      btns.push(`<button ${safePage === totalPages ? 'disabled' : ''} data-page="${safePage+1}">›</button>`);
+      cont.innerHTML = btns.join('');
+      cont.querySelectorAll('button[data-page]').forEach(b => {
+        b.onclick = () => onPageChange(parseInt(b.dataset.page, 10));
+      });
+    }
+  }
+  return { slice, safePage, totalPages };
 }
 
 /* ───────────────────────────────────────────────────────────────
@@ -185,18 +226,26 @@ $('btn-login').onclick = async () => {
 });
 
 $('btn-registro').onclick = async () => {
-  const email = $('reg-email').value.trim();
-  const pass  = $('reg-password').value;
-  const pass2 = $('reg-password2').value;
+  const nombre   = $('reg-nombre').value.trim();
+  const apellido = $('reg-apellido').value.trim();
+  const email    = $('reg-email').value.trim();
+  const pass     = $('reg-password').value;
+  const pass2    = $('reg-password2').value;
   const err = $('reg-error'); const ok = $('reg-ok');
   err.classList.add('hidden'); ok.classList.add('hidden');
 
-  if (!email || !pass || !pass2) { err.textContent = 'Completá todos los campos.'; err.classList.remove('hidden'); return; }
+  if (!nombre || !apellido)       { err.textContent = 'Nombre y apellido son obligatorios.'; err.classList.remove('hidden'); return; }
+  if (!email || !pass || !pass2)  { err.textContent = 'Completá todos los campos.'; err.classList.remove('hidden'); return; }
   if (pass.length < 8)            { err.textContent = 'La contraseña debe tener al menos 8 caracteres.'; err.classList.remove('hidden'); return; }
   if (pass !== pass2)             { err.textContent = 'Las contraseñas no coinciden.'; err.classList.remove('hidden'); return; }
 
   const btn = $('btn-registro'); btn.disabled = true; btn.textContent = 'Creando...';
-  const { error } = await db.auth.signUp({ email, password: pass });
+  // Los datos extra se pasan en options.data → quedan en auth.users.raw_user_meta_data
+  // y el trigger handle_new_user() los lee para insertarlos en profiles.
+  const { error } = await db.auth.signUp({
+    email, password: pass,
+    options: { data: { nombre, apellido } }
+  });
   btn.disabled = false; btn.textContent = 'Crear cuenta';
 
   if (error) {
@@ -207,7 +256,7 @@ $('btn-registro').onclick = async () => {
   }
   ok.textContent = '✓ Cuenta creada. Revisá tu email para confirmar. Después de iniciar sesión, un administrador te asignará un rol.';
   ok.classList.remove('hidden');
-  ['reg-email','reg-password','reg-password2'].forEach(id => $(id).value = '');
+  ['reg-nombre','reg-apellido','reg-email','reg-password','reg-password2'].forEach(id => $(id).value = '');
 };
 
 $('btn-reset').onclick = async () => {
@@ -331,6 +380,7 @@ function switchView(viewId) {
   if (viewId === 'mentor-alumnos')  loadMentorAlumnos();
   if (viewId === 'admin-alumnos')   loadAdminAlumnos();
   if (viewId === 'admin-mentores')  loadAdminMentores();
+  if (viewId === 'admin-usuarios')  loadAdminUsuarios();
   if (viewId === 'super-usuarios')  loadSuperUsuarios();
 }
 
@@ -358,8 +408,8 @@ async function loadMentorAlumnos() {
 
 function renderMentorAlumnos() {
   const grid = $('cards-grid');
-  // limpiar excepto loading/empty
-  $$('.alumno-mentor-card', grid).forEach(n => n.remove());
+  // limpiar contenido (preservamos loading/empty que están como hijos)
+  grid.innerHTML = '<div class="empty-state hidden" id="empty-state"><span>🌿</span><p>Aún no tenés alumnos asignados.<br/>Un administrador te los va a asignar.</p></div>';
 
   let list = state.mentorAlumnos.slice();
 
@@ -382,7 +432,7 @@ function renderMentorAlumnos() {
   }
 
   // Ordenamiento
-  if (state.mentorSort === 'nombre')   list.sort((a,b) => (a.nombre||'').localeCompare(b.nombre||''));
+  if (state.mentorSort === 'nombre')   list.sort((a,b) => (a.apellido||a.nombre||'').localeCompare(b.apellido||b.nombre||''));
   if (state.mentorSort === 'ultimo')   list.sort((a,b) => (b.fecha_ultimo||'').localeCompare(a.fecha_ultimo||''));
   if (state.mentorSort === 'reciente') list.sort((a,b) => (b.created_at||'').localeCompare(a.created_at||''));
 
@@ -393,39 +443,87 @@ function renderMentorAlumnos() {
   $('stat-alerta').textContent = all.filter(a => a.fecha_ultimo && diffDays(a.fecha_ultimo) > 14).length;
   $('stat-baja').textContent   = state.mentorAlumnos.filter(a => a.baja).length;
 
+  // Contador de resultados
+  $('mnt-results-count').textContent =
+    list.length === 0 ? 'Sin resultados' :
+    list.length === 1 ? '1 alumno' :
+    `${list.length} alumnos`;
+
+  // Paginación
+  const { slice } = paginate(list, state.mentorPage, 'mnt-pagination', (p) => {
+    state.mentorPage = p; renderMentorAlumnos();
+  });
+
+  // Modo vista
+  grid.classList.toggle('mode-list', state.mentorViewMode === 'list');
+
   if (!list.length) {
     $('empty-state').classList.remove('hidden');
     return;
   }
-  $('empty-state').classList.add('hidden');
 
-  for (const a of list) {
-    grid.insertAdjacentHTML('beforeend', renderMentorCard(a));
+  for (const a of slice) {
+    grid.insertAdjacentHTML('beforeend',
+      state.mentorViewMode === 'list'
+        ? renderMentorRow(a)
+        : renderMentorCard(a));
   }
   $$('.alumno-mentor-card', grid).forEach(card => {
     card.onclick = () => openAlumnoForm(card.dataset.id);
   });
 }
 
+function renderMentorRow(a) {
+  const dias = a.fecha_ultimo ? diffDays(a.fecha_ultimo) : null;
+  const alerta = dias !== null && dias > 14;
+  const eliminado = !!a.eliminado;
+  const tag = eliminado
+    ? '<span class="alumno-card-tag tag-eliminado">quitado</span>'
+    : a.baja
+      ? '<span class="alumno-card-tag tag-baja">baja</span>'
+      : a.activa
+        ? '<span class="alumno-card-tag tag-asignado">activa</span>'
+        : '<span class="alumno-card-tag tag-sin">pausa</span>';
+  return `
+    <article class="alumno-card alumno-mentor-card ${eliminado ? 'is-eliminado' : ''}" data-id="${a.id}">
+      <div>
+        <div class="alumno-card-name">${escapeHtml(a.apellido)}, ${escapeHtml(a.nombre)}</div>
+      </div>
+      <div class="alumno-card-meta list-col-fecha">
+        Últ. contacto: <strong>${formatDate(a.fecha_ultimo)}</strong>
+        ${alerta && !eliminado ? `<span style="color:#C4825A"> · ${dias} días</span>` : ''}
+      </div>
+      <div class="alumno-card-meta">
+        ${a.telefono ? '📞 ' + escapeHtml(a.telefono) : ''}
+        ${a.respondio ? ` <span class="sep">·</span> ${escapeHtml(a.respondio)}` : ''}
+      </div>
+      ${tag}
+    </article>`;
+}
+
 function renderMentorCard(a) {
   const dias = a.fecha_ultimo ? diffDays(a.fecha_ultimo) : null;
   const alerta = dias !== null && dias > 14;
+  const eliminado = !!a.eliminado;
   return `
-    <article class="alumno-card alumno-mentor-card" data-id="${a.id}">
+    <article class="alumno-card alumno-mentor-card ${eliminado ? 'is-eliminado' : ''}" data-id="${a.id}">
       <div class="alumno-card-head">
         <span class="alumno-card-name">${escapeHtml(a.nombre)} ${escapeHtml(a.apellido)}</span>
-        ${a.baja
-          ? '<span class="alumno-card-tag tag-baja">baja</span>'
-          : a.activa
-            ? '<span class="alumno-card-tag tag-asignado">activa</span>'
-            : '<span class="alumno-card-tag tag-sin">pausa</span>'}
+        ${eliminado
+          ? '<span class="alumno-card-tag tag-eliminado">quitado</span>'
+          : a.baja
+            ? '<span class="alumno-card-tag tag-baja">baja</span>'
+            : a.activa
+              ? '<span class="alumno-card-tag tag-asignado">activa</span>'
+              : '<span class="alumno-card-tag tag-sin">pausa</span>'}
       </div>
       <div class="alumno-card-meta">
         ${a.telefono ? `📞 ${escapeHtml(a.telefono)}<br/>` : ''}
         Último contacto: <strong>${formatDate(a.fecha_ultimo)}</strong>
-        ${alerta ? ' · <span style="color:#C4825A">⚠ ' + dias + ' días</span>' : ''}
+        ${alerta && !eliminado ? ' · <span style="color:#C4825A">⚠ ' + dias + ' días</span>' : ''}
         ${a.respondio ? `<br/>Respondió: <strong>${escapeHtml(a.respondio)}</strong>` : ''}
       </div>
+      ${eliminado ? '<div class="alumno-removed-banner">Este alumno fue quitado de las mentorías</div>' : ''}
     </article>`;
 }
 
@@ -435,16 +533,28 @@ $$('[data-view-pane="mentor-alumnos"] .chip').forEach(chip => {
     $$('[data-view-pane="mentor-alumnos"] .chip').forEach(c => c.classList.remove('active'));
     chip.classList.add('active');
     state.mentorFilter = chip.dataset.filter;
+    state.mentorPage = 1;
     renderMentorAlumnos();
   };
 });
 $('search-input').addEventListener('input', e => {
   state.mentorSearch = e.target.value;
+  state.mentorPage = 1;
   renderMentorAlumnos();
 });
 $('sort-select').addEventListener('change', e => {
   state.mentorSort = e.target.value;
   renderMentorAlumnos();
+});
+// Toggle de modo vista
+['mnt-view-grid','mnt-view-list'].forEach(id => {
+  $(id).onclick = () => {
+    const mode = $(id).dataset.viewMode;
+    state.mentorViewMode = mode;
+    $('mnt-view-grid').classList.toggle('active', mode === 'grid');
+    $('mnt-view-list').classList.toggle('active', mode === 'list');
+    renderMentorAlumnos();
+  };
 });
 
 /* ═══════════════════════════════════════════════════════════════
@@ -471,55 +581,133 @@ function renderAdminAlumnos() {
   // Mapa id→mentor
   const mentorMap = new Map(state.adminMentores.map(m => [m.id, m]));
 
+  // Poblar select de filtro por mentor (sólo la primera vez o si cambió la lista)
+  const sel = $('adm-filter-mentor');
+  if (sel && sel.children.length <= 1 + state.adminMentores.length === false) {
+    // Reconstruir si hay desincronía
+  }
+  if (sel) {
+    const current = sel.value;
+    sel.innerHTML = '<option value="">Todos los mentores</option><option value="__none__">— Sin asignar —</option>';
+    state.adminMentores
+      .slice()
+      .sort((a,b) => fullName(a).localeCompare(fullName(b)))
+      .forEach(m => {
+        sel.insertAdjacentHTML('beforeend',
+          `<option value="${m.id}">${escapeHtml(fullName(m))}</option>`);
+      });
+    sel.value = current || state.adminAlumnoMentor || '';
+  }
+
   let list = state.adminAlumnos.slice();
   const f = state.adminAlumnoFilter;
-  if (f === 'asignados')   list = list.filter(a => a.mentor_id && !a.baja);
-  if (f === 'sin-asignar') list = list.filter(a => !a.mentor_id && !a.baja);
-  if (f === 'baja')        list = list.filter(a => a.baja);
-  if (f === 'all')         list = list.filter(a => !a.baja);
+  // Por defecto, todos los filtros excluyen los eliminados,
+  // salvo el chip "eliminados" que los muestra exclusivamente.
+  if (f === 'eliminados') {
+    list = list.filter(a => a.eliminado);
+  } else {
+    list = list.filter(a => !a.eliminado);
+    if (f === 'asignados')   list = list.filter(a => a.mentor_id && !a.baja);
+    if (f === 'sin-asignar') list = list.filter(a => !a.mentor_id && !a.baja);
+    if (f === 'baja')        list = list.filter(a => a.baja);
+    if (f === 'all')         list = list.filter(a => !a.baja);
+  }
 
+  // Filtro adicional por mentor
+  if (state.adminAlumnoMentor === '__none__') {
+    list = list.filter(a => !a.mentor_id);
+  } else if (state.adminAlumnoMentor) {
+    list = list.filter(a => a.mentor_id === state.adminAlumnoMentor);
+  }
+
+  // Búsqueda
   if (state.adminAlumnoSearch) {
     const q = state.adminAlumnoSearch.toLowerCase();
     list = list.filter(a => {
       const m = mentorMap.get(a.mentor_id);
-      const mentorStr = m ? `${m.nombre||''} ${m.apellido||''} ${m.email||''}` : '';
-      return [a.nombre,a.apellido,a.telefono,mentorStr].filter(Boolean)
+      const mentorStr = m ? fullName(m) : '';
+      return [a.nombre,a.apellido,a.telefono,a.email,mentorStr].filter(Boolean)
         .some(v => v.toLowerCase().includes(q));
     });
   }
 
-  // Stats
-  $('adm-stat-total').textContent      = state.adminAlumnos.filter(a => !a.baja).length;
-  $('adm-stat-asignados').textContent  = state.adminAlumnos.filter(a => a.mentor_id && !a.baja).length;
-  $('adm-stat-sin').textContent        = state.adminAlumnos.filter(a => !a.mentor_id && !a.baja).length;
-  $('adm-stat-bajas').textContent      = state.adminAlumnos.filter(a => a.baja).length;
+  // Ordenamiento
+  if (state.adminAlumnoSort === 'apellido') {
+    list.sort((a,b) => (a.apellido||'').localeCompare(b.apellido||''));
+  } else if (state.adminAlumnoSort === 'ultimo') {
+    list.sort((a,b) => (b.fecha_ultimo||'').localeCompare(a.fecha_ultimo||''));
+  } else if (state.adminAlumnoSort === 'mentor') {
+    list.sort((a,b) => {
+      const ma = mentorMap.get(a.mentor_id);
+      const mb = mentorMap.get(b.mentor_id);
+      return (ma ? fullName(ma) : 'zzz').localeCompare(mb ? fullName(mb) : 'zzz');
+    });
+  } else {
+    list.sort((a,b) => (b.created_at||'').localeCompare(a.created_at||''));
+  }
+
+  // Stats — sólo cuentan alumnos NO eliminados
+  const noElim = state.adminAlumnos.filter(a => !a.eliminado);
+  $('adm-stat-total').textContent      = noElim.filter(a => !a.baja).length;
+  $('adm-stat-asignados').textContent  = noElim.filter(a => a.mentor_id && !a.baja).length;
+  $('adm-stat-sin').textContent        = noElim.filter(a => !a.mentor_id && !a.baja).length;
+  $('adm-stat-bajas').textContent      = noElim.filter(a => a.baja).length;
+
+  $('adm-results-count').textContent =
+    list.length === 0 ? 'Sin resultados' :
+    list.length === 1 ? '1 alumno' :
+    `${list.length} alumnos`;
+
+  // Paginación
+  const { slice } = paginate(list, state.adminAlumnoPage, 'adm-pagination', (p) => {
+    state.adminAlumnoPage = p; renderAdminAlumnos();
+  });
+
+  grid.classList.toggle('mode-list', state.adminAlumnoViewMode === 'list');
 
   if (!list.length) {
     grid.innerHTML = '<div class="empty-state"><span>🌿</span><p>No hay alumnos en este filtro.</p></div>';
     return;
   }
 
-  for (const a of list) {
+  for (const a of slice) {
     const m = mentorMap.get(a.mentor_id);
     const mentorTxt = m ? fullName(m) : 'Sin asignar';
-    const tag = a.baja
-      ? '<span class="alumno-card-tag tag-baja">baja</span>'
-      : (a.mentor_id
-          ? '<span class="alumno-card-tag tag-asignado">asignado</span>'
-          : '<span class="alumno-card-tag tag-sin">sin mentor</span>');
-    grid.insertAdjacentHTML('beforeend', `
-      <article class="alumno-card admin-alumno-card" data-id="${a.id}">
-        <div class="alumno-card-head">
-          <span class="alumno-card-name">${escapeHtml(a.nombre)} ${escapeHtml(a.apellido)}</span>
+    const eliminado = !!a.eliminado;
+    const tag = eliminado
+      ? '<span class="alumno-card-tag tag-eliminado">eliminado</span>'
+      : a.baja
+        ? '<span class="alumno-card-tag tag-baja">baja</span>'
+        : (a.mentor_id
+            ? '<span class="alumno-card-tag tag-asignado">asignado</span>'
+            : '<span class="alumno-card-tag tag-sin">sin mentor</span>');
+    const elimClass = eliminado ? 'is-eliminado' : '';
+
+    if (state.adminAlumnoViewMode === 'list') {
+      grid.insertAdjacentHTML('beforeend', `
+        <article class="alumno-card admin-alumno-card ${elimClass}" data-id="${a.id}">
+          <div class="alumno-card-name">${escapeHtml(a.apellido)}, ${escapeHtml(a.nombre)}</div>
+          <div class="alumno-card-meta list-col-mentor">${escapeHtml(mentorTxt)}</div>
+          <div class="alumno-card-meta list-col-fecha">${a.telefono ? '📞 ' + escapeHtml(a.telefono) : ''}</div>
           ${tag}
-        </div>
-        <div class="alumno-card-meta">
-          Mentor: <strong>${escapeHtml(mentorTxt)}</strong>
-          ${a.telefono ? '<br/>📞 ' + escapeHtml(a.telefono) : ''}
-          <br/>Creado: <strong>${formatDate(a.created_at?.slice(0,10))}</strong>
-        </div>
-      </article>
-    `);
+        </article>
+      `);
+    } else {
+      grid.insertAdjacentHTML('beforeend', `
+        <article class="alumno-card admin-alumno-card ${elimClass}" data-id="${a.id}">
+          <div class="alumno-card-head">
+            <span class="alumno-card-name">${escapeHtml(a.nombre)} ${escapeHtml(a.apellido)}</span>
+            ${tag}
+          </div>
+          <div class="alumno-card-meta">
+            Mentor: <strong>${escapeHtml(mentorTxt)}</strong>
+            ${a.telefono ? '<br/>📞 ' + escapeHtml(a.telefono) : ''}
+            <br/>Creado: <strong>${formatDate(a.created_at?.slice(0,10))}</strong>
+            ${eliminado && a.eliminado_at ? '<br/><span style="color:#B85450">Eliminado: ' + formatDate(a.eliminado_at.slice(0,10)) + '</span>' : ''}
+          </div>
+        </article>
+      `);
+    }
   }
 
   $$('.admin-alumno-card', grid).forEach(card => {
@@ -532,12 +720,32 @@ $$('#adm-filter-chips .chip').forEach(chip => {
     $$('#adm-filter-chips .chip').forEach(c => c.classList.remove('active'));
     chip.classList.add('active');
     state.adminAlumnoFilter = chip.dataset.filter;
+    state.adminAlumnoPage = 1;
     renderAdminAlumnos();
   };
 });
 $('adm-search-alumnos').addEventListener('input', e => {
   state.adminAlumnoSearch = e.target.value;
+  state.adminAlumnoPage = 1;
   renderAdminAlumnos();
+});
+$('adm-filter-mentor').addEventListener('change', e => {
+  state.adminAlumnoMentor = e.target.value;
+  state.adminAlumnoPage = 1;
+  renderAdminAlumnos();
+});
+$('adm-sort').addEventListener('change', e => {
+  state.adminAlumnoSort = e.target.value;
+  renderAdminAlumnos();
+});
+['adm-view-grid','adm-view-list'].forEach(id => {
+  $(id).onclick = () => {
+    const mode = $(id).dataset.viewMode;
+    state.adminAlumnoViewMode = mode;
+    $('adm-view-grid').classList.toggle('active', mode === 'grid');
+    $('adm-view-list').classList.toggle('active', mode === 'list');
+    renderAdminAlumnos();
+  };
 });
 $('btn-admin-new-alumno').onclick = () => openAlumnoForm(null);
 
@@ -552,7 +760,6 @@ function openAlumnoForm(alumnoId) {
 
   $('modal-form').classList.remove('hidden');
   $('form-id').value = alumnoId || '';
-  $('modal-title').textContent = alumnoId ? 'Editar alumno' : 'Nuevo alumno';
 
   // Cargar select de mentores (visible y editable sólo para admin)
   const sel = $('form-mentor');
@@ -564,11 +771,20 @@ function openAlumnoForm(alumnoId) {
   });
   $('form-mentor-wrap').style.display = isAdmin ? '' : 'none';
 
+  // Reset de botones eliminar/restaurar
+  $('btn-eliminar-alumno').classList.add('hidden');
+  $('btn-restaurar-alumno').classList.add('hidden');
+
+  let estaEliminado = false;
   if (alumnoId) {
-    // Buscar el alumno en estado (puede venir de cualquier vista)
     const pool = isAdmin ? state.adminAlumnos : state.mentorAlumnos;
     const a = pool.find(x => String(x.id) === String(alumnoId));
     if (!a) { toast('No se encontró el alumno','error'); return; }
+    estaEliminado = !!a.eliminado;
+
+    $('modal-title').textContent = estaEliminado
+      ? 'Alumno eliminado'
+      : (isMentor ? 'Editar alumno' : 'Editar alumno');
 
     $('form-nombre').value      = a.nombre || '';
     $('form-apellido').value    = a.apellido || '';
@@ -582,7 +798,20 @@ function openAlumnoForm(alumnoId) {
     $('form-inquietudes').value = a.inquietudes || '';
     $('form-seguimiento').value = a.seguimiento || '';
     if (isAdmin) $('form-mentor').value = a.mentor_id || '';
+
+    // Botones de eliminar/restaurar — sólo para admin
+    if (isAdmin) {
+      if (estaEliminado) {
+        $('btn-restaurar-alumno').classList.remove('hidden');
+        $('btn-restaurar-alumno').dataset.id = a.id;
+      } else {
+        $('btn-eliminar-alumno').classList.remove('hidden');
+        $('btn-eliminar-alumno').dataset.id = a.id;
+        $('btn-eliminar-alumno').dataset.name = `${a.nombre} ${a.apellido}`;
+      }
+    }
   } else {
+    $('modal-title').textContent = 'Nuevo alumno';
     ['form-nombre','form-apellido','form-telefono','form-email',
      'form-fecha-primer','form-fecha-ultimo','form-respondio',
      'form-tipo-contacto','form-inquietudes','form-seguimiento']
@@ -590,6 +819,15 @@ function openAlumnoForm(alumnoId) {
     $('form-activa').checked = true;
     $('form-mentor').value = '';
   }
+
+  // Si el alumno está eliminado: bloquear edición (sólo lectura)
+  const inputs = $$('#modal-form input, #modal-form select, #modal-form textarea');
+  inputs.forEach(el => {
+    if (el.id === 'form-id') return;
+    if (el.id === 'profile-email') return;
+    el.disabled = estaEliminado;
+  });
+  $('btn-save').classList.toggle('hidden', estaEliminado);
 }
 
 $('modal-close').onclick = () => $('modal-form').classList.add('hidden');
@@ -641,6 +879,95 @@ $('btn-save').onclick = async () => {
   // Refrescar la vista correspondiente
   if (state.currentView === 'mentor-alumnos') loadMentorAlumnos();
   if (state.currentView === 'admin-alumnos')  loadAdminAlumnos();
+};
+
+/* ─── ELIMINACIÓN (soft) con doble confirmación ─── */
+
+let pendingDeleteId = null;
+
+$('btn-eliminar-alumno').onclick = () => {
+  pendingDeleteId = $('btn-eliminar-alumno').dataset.id;
+  const nombre = $('btn-eliminar-alumno').dataset.name || 'este alumno';
+  // Cierro el modal de edición para no apilar overlays
+  $('modal-form').classList.add('hidden');
+  // Reset estado del modal confirm
+  $('confirm-step-1').classList.remove('hidden');
+  $('confirm-step-2').classList.add('hidden');
+  $('confirm-input').value = '';
+  $('confirm-error').classList.add('hidden');
+  $('confirm-alumno-name').textContent = nombre;
+  $('confirm-next').textContent = 'Continuar';
+  $('confirm-next').disabled = false;
+  $('modal-confirm-delete').classList.remove('hidden');
+};
+
+$('confirm-close').onclick  = () => $('modal-confirm-delete').classList.add('hidden');
+$('confirm-cancel').onclick = () => $('modal-confirm-delete').classList.add('hidden');
+
+$('confirm-next').onclick = async () => {
+  const step1Visible = !$('confirm-step-1').classList.contains('hidden');
+  if (step1Visible) {
+    // Paso 1 → Paso 2
+    $('confirm-step-1').classList.add('hidden');
+    $('confirm-step-2').classList.remove('hidden');
+    $('confirm-next').textContent = 'Eliminar definitivamente';
+    setTimeout(() => $('confirm-input').focus(), 50);
+    return;
+  }
+
+  // Paso 2: validar palabra clave y ejecutar
+  const palabra = $('confirm-input').value.trim().toUpperCase();
+  if (palabra !== 'ELIMINAR') {
+    $('confirm-error').textContent = 'Tenés que escribir exactamente la palabra ELIMINAR para confirmar.';
+    $('confirm-error').classList.remove('hidden');
+    return;
+  }
+  $('confirm-error').classList.add('hidden');
+  $('confirm-next').disabled = true;
+  $('confirm-next').textContent = 'Eliminando...';
+
+  const { error } = await db.rpc('admin_eliminar_alumno', { alumno_id: pendingDeleteId });
+  $('confirm-next').disabled = false;
+  $('confirm-next').textContent = 'Eliminar definitivamente';
+
+  if (error) {
+    console.error('admin_eliminar_alumno:', error);
+    if (error.code === '42501') $('confirm-error').textContent = 'No tenés permiso para esto.';
+    else                         $('confirm-error').textContent = 'Error: ' + error.message;
+    $('confirm-error').classList.remove('hidden');
+    return;
+  }
+
+  $('modal-confirm-delete').classList.add('hidden');
+  pendingDeleteId = null;
+  toast('Alumno eliminado ✓');
+  if (state.currentView === 'admin-alumnos') loadAdminAlumnos();
+};
+
+// Enter en el input del paso 2 = ejecutar confirmación
+$('confirm-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('confirm-next').click();
+});
+
+/* ─── RESTAURAR alumno eliminado ─── */
+
+$('btn-restaurar-alumno').onclick = async () => {
+  const id = $('btn-restaurar-alumno').dataset.id;
+  if (!confirm('¿Restaurar este alumno? Volverá a estar activo en las mentorías.')) return;
+
+  const btn = $('btn-restaurar-alumno');
+  btn.disabled = true; btn.textContent = 'Restaurando...';
+  const { error } = await db.rpc('admin_restaurar_alumno', { alumno_id: id });
+  btn.disabled = false; btn.textContent = 'Restaurar';
+
+  if (error) {
+    console.error('admin_restaurar_alumno:', error);
+    toast('Error: ' + error.message, 'error');
+    return;
+  }
+  toast('Alumno restaurado ✓');
+  $('modal-form').classList.add('hidden');
+  if (state.currentView === 'admin-alumnos') loadAdminAlumnos();
 };
 
 /* ═══════════════════════════════════════════════════════════════
@@ -892,47 +1219,148 @@ $('sup-search-users').addEventListener('input', e => {
   renderSuperUsuarios();
 });
 
-/** Llama a la Edge Function. Pasa el JWT actual para que valide identidad server-side. */
-async function callAdminFn(payload) {
-  const { data: { session } } = await db.auth.getSession();
-  if (!session) throw new Error('Sin sesión');
-  const res = await fetch(EDGE_FN_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`,
-      'apikey': CFG.SUPABASE_ANON_KEY,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-  return body;
-}
-
+/** Asignar rol vía RPC. La función SQL valida que seas super_admin. */
 async function changeRole(userId, newRole) {
-  try {
-    await callAdminFn({ action: 'assign_role', user_id: userId, rol: newRole });
-    toast('Rol actualizado ✓');
-    loadSuperUsuarios();
-  } catch (e) {
-    toast('Error: ' + e.message, 'error');
-    loadSuperUsuarios();  // refrescar para revertir el select visualmente
+  const { error } = await db.rpc('admin_assign_role', {
+    target_user: userId,
+    new_rol: newRole
+  });
+  if (error) {
+    console.error('admin_assign_role:', error);
+    if (error.code === '42501')      toast('Sólo super_admin puede asignar roles', 'error');
+    else if (error.code === '22023') toast('No podés quitarte el rol a vos mismo', 'error');
+    else                              toast('Error: ' + error.message, 'error');
+    loadSuperUsuarios();   // revertir el select visualmente
+    return;
   }
+  toast('Rol actualizado ✓');
+  loadSuperUsuarios();
 }
 
 async function toggleActive(userId) {
   const u = state.superUsers.find(x => x.id === userId);
   if (!u) return;
   if (!confirm(`¿${u.activo ? 'Desactivar' : 'Activar'} a ${fullName(u)}?`)) return;
-  try {
-    await callAdminFn({ action: 'set_active', user_id: userId, activo: !u.activo });
-    toast('Usuario actualizado ✓');
-    loadSuperUsuarios();
-  } catch (e) {
-    toast('Error: ' + e.message, 'error');
+
+  const { error } = await db.rpc('admin_set_active', {
+    target_user: userId,
+    new_activo: !u.activo
+  });
+  if (error) {
+    console.error('admin_set_active:', error);
+    if (error.code === '42501')      toast('Sólo super_admin puede hacer esto', 'error');
+    else if (error.code === '22023') toast('No podés desactivarte a vos mismo', 'error');
+    else                              toast('Error: ' + error.message, 'error');
+    return;
   }
+  toast('Usuario actualizado ✓');
+  loadSuperUsuarios();
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   13.b VISTA ADMIN · "Usuarios" (versión restringida del super)
+   Admins pueden asignar admin/mentor, no super_admin.
+   No ven super_admins (la RLS los esconde).
+   No pueden activar/desactivar.
+═══════════════════════════════════════════════════════════════ */
+
+async function loadAdminUsuarios() {
+  // La RLS de profiles_admin_select ya filtra super_admins;
+  // el admin sólo recibe lo que tiene permitido ver.
+  const { data, error } = await db
+    .from('profiles')
+    .select('id,email,rol,nombre,apellido,avatar_url,activo,created_at')
+    .order('created_at', { ascending: false });
+
+  if (error) { toast('Error al cargar usuarios','error'); return; }
+  state.adminUsers = data || [];
+  renderAdminUsuarios();
+}
+
+function renderAdminUsuarios() {
+  const list = $('admin-users-list');
+  list.innerHTML = '';
+
+  let rows = state.adminUsers.slice();
+  const f = state.adminUsersFilter;
+  if (f === 'admin')   rows = rows.filter(u => u.rol === 'admin');
+  if (f === 'mentor')  rows = rows.filter(u => u.rol === 'mentor');
+  if (f === 'sin-rol') rows = rows.filter(u => !u.rol);
+
+  if (state.adminUsersSearch) {
+    const q = state.adminUsersSearch.toLowerCase();
+    rows = rows.filter(u => [u.nombre,u.apellido,u.email]
+      .filter(Boolean).some(v => v.toLowerCase().includes(q)));
+  }
+
+  // Stats — sobre el universo visible al admin
+  $('admU-stat-total').textContent      = state.adminUsers.length;
+  $('admU-stat-admins').textContent     = state.adminUsers.filter(u => u.rol === 'admin').length;
+  $('admU-stat-mentores').textContent   = state.adminUsers.filter(u => u.rol === 'mentor').length;
+  $('admU-stat-pendientes').textContent = state.adminUsers.filter(u => !u.rol).length;
+
+  if (!rows.length) {
+    list.innerHTML = '<div class="empty-state"><span>🌿</span><p>No hay usuarios en este filtro.</p></div>';
+    return;
+  }
+
+  for (const u of rows) {
+    const av = u.avatar_url
+      ? `<img class="user-row-avatar" src="${escapeHtml(u.avatar_url)}" alt=""/>`
+      : `<div class="user-row-avatar-placeholder">${escapeHtml(initials(u))}</div>`;
+    list.insertAdjacentHTML('beforeend', `
+      <div class="user-row ${u.activo ? '' : 'inactive'}" data-id="${u.id}">
+        ${av}
+        <div class="user-row-info">
+          <div class="user-row-name">${escapeHtml(fullName(u))}</div>
+          <div class="user-row-email">${escapeHtml(u.email)}</div>
+        </div>
+        <div class="user-row-controls">
+          <select class="user-rol-select admU-rol-select" data-id="${u.id}">
+            <option value=""        ${!u.rol            ? 'selected':''}>— Sin rol —</option>
+            <option value="mentor"  ${u.rol==='mentor'  ? 'selected':''}>Mentor</option>
+            <option value="admin"   ${u.rol==='admin'   ? 'selected':''}>Admin</option>
+          </select>
+        </div>
+      </div>
+    `);
+  }
+
+  $$('.admU-rol-select', list).forEach(sel => {
+    sel.onchange = () => changeRoleAsAdmin(sel.dataset.id, sel.value || null);
+  });
+}
+
+async function changeRoleAsAdmin(userId, newRole) {
+  // Misma RPC que usa el super: el chequeo de permisos vive en SQL.
+  const { error } = await db.rpc('admin_assign_role', {
+    target_user: userId,
+    new_rol: newRole
+  });
+  if (error) {
+    console.error('admin_assign_role:', error);
+    if (error.code === '42501')      toast('No tenés permiso para asignar ese rol', 'error');
+    else if (error.code === '22023') toast('No podés modificarte a vos mismo', 'error');
+    else                              toast('Error: ' + error.message, 'error');
+    loadAdminUsuarios();
+    return;
+  }
+  toast('Rol actualizado ✓');
+  loadAdminUsuarios();
+}
+
+$$('#admU-filter-chips .chip').forEach(chip => {
+  chip.onclick = () => {
+    $$('#admU-filter-chips .chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    state.adminUsersFilter = chip.dataset.filter;
+    renderAdminUsuarios();
+  };
+});
+$('admU-search-users').addEventListener('input', e => {
+  state.adminUsersSearch = e.target.value;
+  renderAdminUsuarios();
+});
 
 /* ═══════════════════════════════════════════════════════════════
    14. MODAL · Mi perfil (todos los roles)
