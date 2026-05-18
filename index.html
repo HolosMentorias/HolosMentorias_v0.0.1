@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Holos Mentorías</title>
+
+  <!-- Favicon: hoja salvia sobre fondo crema, conservando la estética -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236B9A64'/%3E%3Cpath d='M16 28 Q16 18 16 12' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M16 20 Q9 16 10 10 Q15 13 16 20Z' fill='%23fff' opacity='.9'/%3E%3Cpath d='M16 15 Q23 11 22 5 Q17 8 16 15Z' fill='%23fff' opacity='.7'/%3E%3C/svg%3E" />
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%236B9A64'/%3E%3Cpath d='M90 155 Q90 105 90 70' stroke='%23fff' stroke-width='10' stroke-linecap='round'/%3E%3Cpath d='M90 115 Q52 92 56 58 Q82 72 90 115Z' fill='%23fff' opacity='.9'/%3E%3Cpath d='M90 88 Q128 65 124 30 Q98 44 90 88Z' fill='%23fff' opacity='.75'/%3E%3C/svg%3E" />
+  <meta name="theme-color" content="#6B9A64" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- SDKs -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       PANTALLA LOGIN / REGISTRO / RESET
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="login-screen" class="screen active">
+    <div class="login-bg">
+      <div class="login-orb login-orb-1"></div>
+      <div class="login-orb login-orb-2"></div>
+    </div>
+
+    <!-- PANEL LOGIN -->
+    <div class="login-card" id="panel-login">
+      <div class="login-logo">
+        <span class="logo-leaf">🌿</span>
+        <h1>Holos<br/><em>Mentorías</em></h1>
+      </div>
+      <p class="login-tagline">Espacio de acompañamiento</p>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="login-email" placeholder="tu@email.com" autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label>Contraseña</label>
+        <div class="input-pass-wrap">
+          <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" />
+          <button type="button" class="btn-ojo" data-target="login-password" tabindex="-1" aria-label="Mostrar contraseña">
+            <svg class="ojo-cerrado" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="ojo-abierto" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
+      </div>
+      <p id="login-error" class="error-msg hidden"></p>
+      <button class="btn-primary" id="btn-login">Ingresar</button>
+      <div class="login-links">
+        <button class="link-btn" id="ir-registro">¿No tenés cuenta? Registrate</button>
+        <button class="link-btn" id="ir-reset">¿Olvidaste tu contraseña?</button>
+      </div>
+      <p class="login-footer">Holos Capital Counseling</p>
+    </div>
+
+    <!-- PANEL REGISTRO -->
+    <div class="login-card hidden" id="panel-registro">
+      <div class="login-logo">
+        <span class="logo-leaf">🌿</span>
+        <h1>Crear<br/><em>cuenta</em></h1>
+      </div>
+      <p class="login-tagline">Tu cuenta se crea sin rol. Un administrador te asignará uno.</p>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="reg-email" placeholder="tu@email.com" autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label>Contraseña</label>
+        <div class="input-pass-wrap">
+          <input type="password" id="reg-password" placeholder="Mínimo 8 caracteres" autocomplete="new-password" />
+          <button type="button" class="btn-ojo" data-target="reg-password" tabindex="-1" aria-label="Mostrar contraseña">
+            <svg class="ojo-cerrado" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="ojo-abierto" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Confirmar contraseña</label>
+        <div class="input-pass-wrap">
+          <input type="password" id="reg-password2" placeholder="Repetí la contraseña" autocomplete="new-password" />
+          <button type="button" class="btn-ojo" data-target="reg-password2" tabindex="-1" aria-label="Mostrar contraseña">
+            <svg class="ojo-cerrado" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="ojo-abierto" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
+      </div>
+      <p id="reg-error" class="error-msg hidden"></p>
+      <p id="reg-ok" class="ok-msg hidden"></p>
+      <button class="btn-primary" id="btn-registro">Crear cuenta</button>
+      <div class="login-links">
+        <button class="link-btn" id="ir-login-desde-reg">← Volver al inicio de sesión</button>
+      </div>
+      <p class="login-footer">Holos Capital Counseling</p>
+    </div>
+
+    <!-- PANEL RESET -->
+    <div class="login-card hidden" id="panel-reset">
+      <div class="login-logo">
+        <span class="logo-leaf">🌿</span>
+        <h1>Recuperar<br/><em>contraseña</em></h1>
+      </div>
+      <p class="login-tagline">Te enviamos un link a tu email</p>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="reset-email" placeholder="tu@email.com" autocomplete="email" />
+      </div>
+      <p id="reset-error" class="error-msg hidden"></p>
+      <p id="reset-ok" class="ok-msg hidden"></p>
+      <button class="btn-primary" id="btn-reset">Enviar link de recuperación</button>
+      <div class="login-links">
+        <button class="link-btn" id="ir-login-desde-reset">← Volver al inicio de sesión</button>
+      </div>
+      <p class="login-footer">Holos Capital Counseling</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       PANTALLA "SIN ROL ASIGNADO"
+       Se muestra al usuario recién registrado mientras el super_admin
+       no le haya asignado un rol.
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="pending-screen" class="screen">
+    <div class="pending-card">
+      <span class="pending-icon">⏳</span>
+      <h1>Cuenta pendiente</h1>
+      <p>Tu cuenta fue creada correctamente. Un administrador tiene que asignarte un rol antes de que puedas acceder.</p>
+      <p class="pending-email" id="pending-email">—</p>
+      <button class="btn-secondary" id="pending-logout">Cerrar sesión</button>
+      <button class="link-btn" id="pending-refresh" style="margin-top:8px">Reintentar</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       APP PRINCIPAL — Layout común (header + nav + main)
+       El contenido del main cambia según rol y vista activa.
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="app-screen" class="screen">
+
+    <!-- HEADER -->
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="header-brand">
+          <span class="brand-leaf">🌿</span>
+          <span class="brand-name">Holos<span class="brand-name-sub">Mentorías</span></span>
+        </div>
+        <div class="header-actions">
+          <span class="header-user" id="header-user" title="Usuario actual"></span>
+          <button class="btn-icon" id="btn-profile" title="Mi perfil" aria-label="Mi perfil">
+            <img class="avatar-thumb" id="avatar-thumb" alt="" />
+            <svg id="avatar-placeholder" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </button>
+          <button class="btn-icon" id="btn-logout" title="Cerrar sesión" aria-label="Cerrar sesión">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- NAV de pestañas — visible según rol -->
+      <nav class="app-nav" id="app-nav">
+        <!-- Mentor -->
+        <button class="nav-tab" data-view="mentor-alumnos" data-role="mentor">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Mis alumnos
+        </button>
+        <!-- Admin -->
+        <button class="nav-tab" data-view="admin-alumnos" data-role="admin">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          Alumnos
+        </button>
+        <button class="nav-tab" data-view="admin-mentores" data-role="admin">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          Mentores
+        </button>
+        <!-- Super admin -->
+        <button class="nav-tab" data-view="super-usuarios" data-role="super_admin">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+          Usuarios
+        </button>
+      </nav>
+    </header>
+
+    <!-- MAIN — sólo una vista visible a la vez -->
+    <main class="app-main">
+
+      <!-- ═══════════════════════════════════════════════
+           VISTA MENTOR · "Mis alumnos"
+           Heredada de la app original, mantiene estética
+      ═══════════════════════════════════════════════ -->
+      <section class="view hidden" data-view-pane="mentor-alumnos">
+
+        <section class="stats-row">
+          <div class="stat-card"><span class="stat-num" id="stat-total">0</span><span class="stat-label">Total</span></div>
+          <div class="stat-card stat-active"><span class="stat-num" id="stat-activa">0</span><span class="stat-label">Activas</span></div>
+          <div class="stat-card stat-warn"><span class="stat-num" id="stat-alerta">0</span><span class="stat-label">Sin contacto</span></div>
+          <div class="stat-card stat-baja"><span class="stat-num" id="stat-baja">0</span><span class="stat-label">Bajas</span></div>
+        </section>
+
+        <section class="controls-row">
+          <div class="filter-chips">
+            <button class="chip active" data-filter="all">Todos</button>
+            <button class="chip" data-filter="activa">Activas</button>
+            <button class="chip" data-filter="alerta">Sin contacto</button>
+            <button class="chip" data-filter="respondio-si">Respondió</button>
+            <button class="chip" data-filter="respondio-no">Sin resp.</button>
+            <button class="chip chip-baja" data-filter="baja">Bajas</button>
+          </div>
+          <div class="controls-actions">
+            <button class="btn-export" id="btn-export-pdf" title="Exportar informe PDF">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+              <span>PDF</span>
+            </button>
+          </div>
+        </section>
+
+        <div class="search-controls-row">
+          <div class="search-wrap">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="search-input" placeholder="Buscar nombre, teléfono, inquietudes..." />
+          </div>
+          <div class="view-controls">
+            <select id="sort-select" class="sort-select">
+              <option value="reciente">Más reciente</option>
+              <option value="nombre">Nombre A-Z</option>
+              <option value="ultimo">Último contacto</option>
+            </select>
+          </div>
+        </div>
+
+        <section class="cards-grid" id="cards-grid">
+          <div class="loading-state" id="loading-state">
+            <div class="spinner"></div>
+            <p>Cargando alumnos...</p>
+          </div>
+          <div class="empty-state hidden" id="empty-state">
+            <span>🌿</span>
+            <p>Aún no tenés alumnos asignados.<br/>Un administrador te los va a asignar.</p>
+          </div>
+        </section>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════
+           VISTA ADMIN · "Alumnos" (todos)
+      ═══════════════════════════════════════════════ -->
+      <section class="view hidden" data-view-pane="admin-alumnos">
+        <section class="stats-row">
+          <div class="stat-card"><span class="stat-num" id="adm-stat-total">0</span><span class="stat-label">Total alumnos</span></div>
+          <div class="stat-card stat-active"><span class="stat-num" id="adm-stat-asignados">0</span><span class="stat-label">Asignados</span></div>
+          <div class="stat-card stat-warn"><span class="stat-num" id="adm-stat-sin">0</span><span class="stat-label">Sin asignar</span></div>
+          <div class="stat-card stat-baja"><span class="stat-num" id="adm-stat-bajas">0</span><span class="stat-label">Bajas</span></div>
+        </section>
+
+        <section class="controls-row">
+          <div class="filter-chips" id="adm-filter-chips">
+            <button class="chip active" data-filter="all">Todos</button>
+            <button class="chip" data-filter="asignados">Asignados</button>
+            <button class="chip" data-filter="sin-asignar">Sin asignar</button>
+            <button class="chip chip-baja" data-filter="baja">Bajas</button>
+          </div>
+          <button class="btn-new" id="btn-admin-new-alumno">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nuevo alumno
+          </button>
+        </section>
+
+        <div class="search-controls-row">
+          <div class="search-wrap">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="adm-search-alumnos" placeholder="Buscar alumno por nombre, mentor..." />
+          </div>
+        </div>
+
+        <section class="cards-grid" id="admin-alumnos-grid">
+          <div class="loading-state"><div class="spinner"></div><p>Cargando alumnos...</p></div>
+        </section>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════
+           VISTA ADMIN · "Mentores"
+      ═══════════════════════════════════════════════ -->
+      <section class="view hidden" data-view-pane="admin-mentores">
+        <section class="controls-row">
+          <h2 class="section-title">Mentores registrados</h2>
+        </section>
+
+        <div class="search-controls-row">
+          <div class="search-wrap">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="adm-search-mentores" placeholder="Buscar mentor por nombre o email..." />
+          </div>
+        </div>
+
+        <section class="mentor-grid" id="admin-mentores-grid">
+          <div class="loading-state"><div class="spinner"></div><p>Cargando mentores...</p></div>
+        </section>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════
+           VISTA SUPER ADMIN · "Usuarios"
+      ═══════════════════════════════════════════════ -->
+      <section class="view hidden" data-view-pane="super-usuarios">
+        <section class="stats-row">
+          <div class="stat-card"><span class="stat-num" id="sup-stat-total">0</span><span class="stat-label">Usuarios</span></div>
+          <div class="stat-card stat-active"><span class="stat-num" id="sup-stat-admins">0</span><span class="stat-label">Admins</span></div>
+          <div class="stat-card stat-active"><span class="stat-num" id="sup-stat-mentores">0</span><span class="stat-label">Mentores</span></div>
+          <div class="stat-card stat-warn"><span class="stat-num" id="sup-stat-pendientes">0</span><span class="stat-label">Sin rol</span></div>
+        </section>
+
+        <section class="controls-row">
+          <div class="filter-chips" id="sup-filter-chips">
+            <button class="chip active" data-filter="all">Todos</button>
+            <button class="chip" data-filter="super_admin">Super admin</button>
+            <button class="chip" data-filter="admin">Admins</button>
+            <button class="chip" data-filter="mentor">Mentores</button>
+            <button class="chip chip-baja" data-filter="sin-rol">Sin rol</button>
+          </div>
+        </section>
+
+        <div class="search-controls-row">
+          <div class="search-wrap">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="sup-search-users" placeholder="Buscar usuario por nombre o email..." />
+          </div>
+        </div>
+
+        <section class="users-list" id="super-users-list">
+          <div class="loading-state"><div class="spinner"></div><p>Cargando usuarios...</p></div>
+        </section>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       MODAL · Editar perfil propio (todos los roles)
+       Permite cambiar nombre, apellido y subir foto
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay hidden" id="modal-profile">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Mi perfil</h2>
+        <button class="btn-icon" id="profile-close" aria-label="Cerrar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="avatar-editor">
+          <div class="avatar-preview" id="avatar-preview">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <div class="avatar-actions">
+            <label class="btn-secondary" for="profile-avatar-input">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Cambiar foto
+            </label>
+            <input type="file" id="profile-avatar-input" accept="image/jpeg,image/png,image/webp" hidden />
+            <button class="btn-link-danger hidden" id="profile-avatar-remove">Quitar foto</button>
+            <p class="hint">Se comprime a WebP ~50 KB. Máximo 256 KB.</p>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Nombre</label>
+            <input type="text" id="profile-nombre" />
+          </div>
+          <div class="form-group">
+            <label>Apellido</label>
+            <input type="text" id="profile-apellido" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="profile-email" disabled />
+          <p class="hint">El email no se puede cambiar desde acá.</p>
+        </div>
+        <p id="profile-error" class="error-msg hidden"></p>
+        <p id="profile-ok" class="ok-msg hidden"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="profile-cancel">Cancelar</button>
+        <button class="btn-primary" id="profile-save">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       MODAL · Crear / Editar alumno (admin + mentor)
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay hidden" id="modal-form">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="modal-title">Nuevo alumno</h2>
+        <button class="btn-icon" id="modal-close" aria-label="Cerrar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="form-id" />
+
+        <div class="form-section-title">Datos personales</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Nombre *</label>
+            <input type="text" id="form-nombre" placeholder="Ana" required />
+          </div>
+          <div class="form-group">
+            <label>Apellido *</label>
+            <input type="text" id="form-apellido" placeholder="García" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Teléfono</label>
+            <input type="tel" id="form-telefono" placeholder="+54 11 ..." />
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="form-email" placeholder="alumno@email.com" />
+          </div>
+        </div>
+
+        <!-- Asignación de mentor (sólo admin lo edita; mentor lo ve readonly) -->
+        <div class="form-group" id="form-mentor-wrap">
+          <label>Mentor asignado</label>
+          <select id="form-mentor"></select>
+          <p class="hint">Sólo administradores pueden reasignar al mentor.</p>
+        </div>
+
+        <div class="form-section-title">Seguimiento</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Fecha 1er contacto</label>
+            <input type="date" id="form-fecha-primer" />
+          </div>
+          <div class="form-group">
+            <label>Fecha último contacto</label>
+            <input type="date" id="form-fecha-ultimo" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>¿Respondió?</label>
+            <select id="form-respondio">
+              <option value="">—</option>
+              <option value="Sí">Sí</option>
+              <option value="No">No</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Tipo de contacto</label>
+            <select id="form-tipo-contacto">
+              <option value="">—</option>
+              <option value="Mensaje">Mensaje</option>
+              <option value="Llamada telefónica">Llamada</option>
+              <option value="Videollamada">Videollamada</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="switch-row">
+          <div class="switch-info">
+            <span class="switch-label">Mentoría activa</span>
+            <span class="switch-desc">El alumno continúa en proceso</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="form-activa" />
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+          </label>
+        </div>
+
+        <div class="form-section-title">Inquietudes del alumno</div>
+        <div class="form-group">
+          <textarea id="form-inquietudes" rows="3" placeholder="Preocupaciones, dudas..."></textarea>
+        </div>
+        <div class="form-section-title">Seguimiento del mentor</div>
+        <div class="form-group">
+          <textarea id="form-seguimiento" rows="4" placeholder="Intervenciones, observaciones..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-cancel">Cancelar</button>
+        <button class="btn-primary" id="btn-save">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast hidden" id="toast"></div>
+
+  <!-- Config (inyectada por Cloudflare en build, ver README) -->
+  <script>
+    // Estos valores son PÚBLICOS por diseño (la seguridad real está en RLS).
+    // En producción los inyecta Cloudflare Pages como variables de entorno
+    // y este bloque se sobreescribe en el build step.
+    window.__HOLOS_CONFIG__ = {
+      SUPABASE_URL:  "https://qhawykutieqkxcexlrco.supabase.co",
+      SUPABASE_ANON_KEY: "REEMPLAZAR_EN_BUILD"
+    };
+  </script>
+  <script src="app.js" type="module"></script>
+</body>
+</html>
