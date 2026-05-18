@@ -97,20 +97,39 @@ git push -u origin main
 
 ### 6) Desplegar en Cloudflare Pages
 
-1. Cloudflare → Workers & Pages → Create → Pages → Connect to Git → elegí el repo.
-2. Build settings:
-   - **Framework preset**: None
-   - **Build command**:
+Tenés **dos opciones** para manejar las credenciales:
+
+#### Opción A — Directo (más simple, está OK)
+Las credenciales ya están escritas en `index.html`. La `anon_key` es pública por diseño,
+así que **no es un problema de seguridad** tenerla en el repo. Si vas por acá:
+- **Build command**: dejá vacío
+- **Build output directory**: `/`
+- No necesitás environment variables.
+
+#### Opción B — Inyección en build (más prolijo, repo "limpio")
+Si preferís no tener las credenciales en el repo (útil si pensás abrirlo a otros devs),
+reemplazá en `index.html` los valores reales por placeholders:
+
+```js
+window.__HOLOS_CONFIG__ = {
+  SUPABASE_URL:  "REEMPLAZAR_URL",
+  SUPABASE_ANON_KEY: "REEMPLAZAR_KEY"
+};
+```
+
+Y configurá en Cloudflare:
+- **Build command**:
      ```sh
-     sed -i "s|REEMPLAZAR_EN_BUILD|$SUPABASE_ANON_KEY|g" index.html
-     sed -i "s|https://qhawykutieqkxcexlrco.supabase.co|$SUPABASE_URL|g" index.html
+     sed -i "s|REEMPLAZAR_URL|$SUPABASE_URL|g" index.html
+     sed -i "s|REEMPLAZAR_KEY|$SUPABASE_ANON_KEY|g" index.html
      ```
-   - **Build output directory**: `/` (la raíz del repo)
-3. Environment variables (Production y Preview):
+- **Build output directory**: `/`
+- **Environment variables** (Production y Preview):
    - `SUPABASE_URL` → tu Project URL
    - `SUPABASE_ANON_KEY` → tu anon public key
-4. Deploy. Cloudflare te da un dominio `*.pages.dev`. Después podés agregar el dominio
-   propio en Custom domains.
+
+Una vez configurado (cualquiera de las dos opciones): **Deploy**. Cloudflare te da un
+dominio `*.pages.dev`. Después podés agregar el dominio propio en Custom domains.
 
 ### 7) Ajustar CORS de la Edge Function al dominio real
 
