@@ -181,6 +181,11 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Mis alumnos
         </button>
+        <button class="nav-tab" data-view="mentor-mensajes" data-role="mentor">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Mensajes
+          <span class="nav-badge hidden" id="mnt-msg-badge">0</span>
+        </button>
         <!-- Admin -->
         <button class="nav-tab" data-view="admin-alumnos" data-role="admin">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
@@ -189,6 +194,11 @@
         <button class="nav-tab" data-view="admin-mentores" data-role="admin">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
           Mentores
+        </button>
+        <button class="nav-tab" data-view="admin-mensajes" data-role="admin">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Mensajes
+          <span class="nav-badge hidden" id="adm-msg-badge">0</span>
         </button>
         <button class="nav-tab" data-view="admin-usuarios" data-role="admin">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
@@ -385,6 +395,57 @@
         <section class="users-list" id="admin-users-list">
           <div class="loading-state"><div class="spinner"></div><p>Cargando usuarios...</p></div>
         </section>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════
+           VISTA MENTOR · "Mensajes" — chat con admins
+      ═══════════════════════════════════════════════ -->
+      <section class="view hidden" data-view-pane="mentor-mensajes">
+        <div class="chat-layout" data-chat-context="mentor">
+          <aside class="chat-sidebar" id="mnt-chat-sidebar">
+            <div class="chat-sidebar-header">
+              <h2 class="section-title">Administradores</h2>
+            </div>
+            <div class="chat-sidebar-list" id="mnt-chat-list">
+              <div class="loading-state"><div class="spinner"></div><p>Cargando...</p></div>
+            </div>
+          </aside>
+          <section class="chat-main" id="mnt-chat-main">
+            <div class="chat-empty" id="mnt-chat-empty">
+              <span>💬</span>
+              <p>Elegí un administrador para empezar a conversar.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════
+           VISTA ADMIN · "Mensajes" — chat con mentores
+      ═══════════════════════════════════════════════ -->
+      <section class="view hidden" data-view-pane="admin-mensajes">
+        <div class="chat-layout" data-chat-context="admin">
+          <aside class="chat-sidebar" id="adm-chat-sidebar">
+            <div class="chat-sidebar-header">
+              <h2 class="section-title">Mentores</h2>
+              <button class="btn-secondary btn-mini" id="adm-chat-new" title="Iniciar chat con un mentor">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Nuevo
+              </button>
+            </div>
+            <div class="chat-sidebar-search">
+              <input type="text" id="adm-chat-search" placeholder="Buscar mentor..." />
+            </div>
+            <div class="chat-sidebar-list" id="adm-chat-list">
+              <div class="loading-state"><div class="spinner"></div><p>Cargando...</p></div>
+            </div>
+          </aside>
+          <section class="chat-main" id="adm-chat-main">
+            <div class="chat-empty" id="adm-chat-empty">
+              <span>💬</span>
+              <p>Elegí un mentor de la lista o tocá "Nuevo" para empezar.</p>
+            </div>
+          </section>
+        </div>
       </section>
 
       <!-- ═══════════════════════════════════════════════
@@ -619,6 +680,24 @@
       <div class="modal-footer">
         <button class="btn-secondary" id="confirm-cancel">Cancelar</button>
         <button class="btn-danger" id="confirm-next">Continuar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       MODAL · Elegir mentor para iniciar chat (admin)
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay hidden" id="modal-pick-mentor">
+    <div class="modal-card modal-card-small">
+      <div class="modal-header">
+        <h2>Iniciar chat</h2>
+        <button class="btn-icon" id="pick-mentor-close" aria-label="Cerrar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <input type="text" id="pick-mentor-search" placeholder="Buscar mentor..." class="pick-search" />
+        <div class="pick-list" id="pick-mentor-list"></div>
       </div>
     </div>
   </div>

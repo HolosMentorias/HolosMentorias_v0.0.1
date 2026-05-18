@@ -369,6 +369,12 @@ function configureNavForRole(rol) {
 }
 
 function switchView(viewId) {
+  // Desuscribir realtime si nos vamos de una vista de chat
+  if (state.currentView && state.currentView.endsWith('-mensajes') && viewId !== state.currentView) {
+    unsubscribeRealtime();
+    chat.active = null;
+  }
+
   state.currentView = viewId;
   $$('.view').forEach(v => v.classList.add('hidden'));
   $$('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.view === viewId));
@@ -377,11 +383,13 @@ function switchView(viewId) {
   pane.classList.remove('hidden');
 
   // Cargar datos de la vista
-  if (viewId === 'mentor-alumnos')  loadMentorAlumnos();
-  if (viewId === 'admin-alumnos')   loadAdminAlumnos();
-  if (viewId === 'admin-mentores')  loadAdminMentores();
-  if (viewId === 'admin-usuarios')  loadAdminUsuarios();
-  if (viewId === 'super-usuarios')  loadSuperUsuarios();
+  if (viewId === 'mentor-alumnos')   loadMentorAlumnos();
+  if (viewId === 'mentor-mensajes')  loadChat('mentor');
+  if (viewId === 'admin-alumnos')    loadAdminAlumnos();
+  if (viewId === 'admin-mentores')   loadAdminMentores();
+  if (viewId === 'admin-mensajes')   loadChat('admin');
+  if (viewId === 'admin-usuarios')   loadAdminUsuarios();
+  if (viewId === 'super-usuarios')   loadSuperUsuarios();
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1361,6 +1369,446 @@ $('admU-search-users').addEventListener('input', e => {
   state.adminUsersSearch = e.target.value;
   renderAdminUsuarios();
 });
+
+/* ═══════════════════════════════════════════════════════════════
+   13.c CHAT 1-a-1 mentor ↔ admin (Fase 4)
+
+   Estado del chat:
+   - chatRole: 'mentor' | 'admin' (según qué pestaña estamos)
+   - chatConversations: lista cacheada de las conversaciones del usuario
+   - chatPeers: lista de "del otro lado" (admins para el mentor,
+     mentores para el admin) — sirve para crear chats nuevos
+   - chatActive: la conversación abierta { id, peer }
+   - chatMessages: mensajes de la conversación activa
+   - realtimeChannel: canal de supabase (se desuscribe al cambiar)
+   - unread: { conversationId: count } para badges
+═══════════════════════════════════════════════════════════════ */
+
+const chat = {
+  conversations: [],
+  peers: [],
+  active: null,         // { id, peer: profile }
+  messages: [],
+  realtimeChannel: null,
+  unread: {},           // map conversationId -> número de no leídos
+};
+
+// Carga la lista de conversaciones del usuario + los peers disponibles.
+// Para el mentor: peers = admins activos.
+// Para el admin: peers = mentores activos.
+async function loadChat(role) {
+  const sidebarList = role === 'mentor' ? $('mnt-chat-list') : $('adm-chat-list');
+  sidebarList.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Cargando...</p></div>';
+
+  // 1) Conversaciones donde el usuario es participante
+  const convQuery = db.from('conversations')
+    .select('id, admin_id, mentor_id, last_message_at, created_at')
+    .eq('is_broadcast', false);
+
+  // 2) Profiles del "otro lado" (peers)
+  const peersQuery = db.from('profiles')
+    .select('id, email, nombre, apellido, avatar_url, rol')
+    .eq('activo', true)
+    .eq('rol', role === 'mentor' ? 'admin' : 'mentor');
+
+  const [convRes, peersRes] = await Promise.all([convQuery, peersQuery]);
+
+  if (convRes.error)  { toast('Error al cargar conversaciones', 'error'); return; }
+  if (peersRes.error) { toast('Error al cargar usuarios', 'error'); return; }
+
+  chat.conversations = convRes.data || [];
+  chat.peers = peersRes.data || [];
+
+  await refreshUnreadCounts(role);
+  renderChatSidebar(role);
+  subscribeRealtime(role);
+}
+
+// Trae el conteo de mensajes no leídos por conversación (para mí).
+// "no leído" = sender ≠ yo Y read_at is null
+async function refreshUnreadCounts(role) {
+  chat.unread = {};
+  if (!chat.conversations.length) { updateBadge(role); return; }
+  const ids = chat.conversations.map(c => c.id);
+  const { data, error } = await db
+    .from('messages')
+    .select('conversation_id')
+    .in('conversation_id', ids)
+    .neq('sender_id', state.profile.id)
+    .is('read_at', null);
+  if (error) { console.error('unread:', error); return; }
+  for (const m of (data || [])) {
+    chat.unread[m.conversation_id] = (chat.unread[m.conversation_id] || 0) + 1;
+  }
+  updateBadge(role);
+}
+
+function updateBadge(role) {
+  const total = Object.values(chat.unread).reduce((a,b) => a+b, 0);
+  const badge = role === 'mentor' ? $('mnt-msg-badge') : $('adm-msg-badge');
+  if (!badge) return;
+  badge.textContent = total > 99 ? '99+' : total;
+  badge.classList.toggle('hidden', total === 0);
+}
+
+function renderChatSidebar(role) {
+  const sidebarList = role === 'mentor' ? $('mnt-chat-list') : $('adm-chat-list');
+  sidebarList.innerHTML = '';
+
+  // Para mostrar peers: por defecto mentor ve TODOS los admins
+  // (independiente de si ya hay conversación). Admin sólo ve los
+  // que ya tienen conversación, y desde "Nuevo" abre el modal.
+  let items;
+  const convByPeerId = new Map();
+  for (const c of chat.conversations) {
+    const peerId = role === 'mentor' ? c.admin_id : c.mentor_id;
+    if (peerId) convByPeerId.set(peerId, c);
+  }
+
+  if (role === 'mentor') {
+    // listar TODOS los admins; si hay conversación, prepend
+    items = chat.peers.map(p => ({ peer: p, conv: convByPeerId.get(p.id) || null }));
+    items.sort((a, b) => {
+      const ta = a.conv?.last_message_at || '';
+      const tb = b.conv?.last_message_at || '';
+      if (ta !== tb) return tb.localeCompare(ta);
+      return fullName(a.peer).localeCompare(fullName(b.peer));
+    });
+  } else {
+    // admin: sólo mentores con los que ya tengo conversación
+    const peerById = new Map(chat.peers.map(p => [p.id, p]));
+    items = chat.conversations
+      .map(c => ({ peer: peerById.get(c.mentor_id), conv: c }))
+      .filter(it => it.peer);
+    // Filtro por búsqueda
+    const q = ($('adm-chat-search')?.value || '').toLowerCase();
+    if (q) {
+      items = items.filter(it => [it.peer.nombre, it.peer.apellido, it.peer.email]
+        .filter(Boolean).some(v => v.toLowerCase().includes(q)));
+    }
+    items.sort((a, b) => (b.conv.last_message_at || '').localeCompare(a.conv.last_message_at || ''));
+  }
+
+  if (!items.length) {
+    sidebarList.innerHTML = role === 'mentor'
+      ? '<div class="empty-state" style="padding:30px 16px"><span>🌿</span><p>No hay administradores disponibles.</p></div>'
+      : '<div class="empty-state" style="padding:30px 16px"><span>💬</span><p>Aún no hay chats.<br/>Tocá "Nuevo" para empezar uno.</p></div>';
+    return;
+  }
+
+  for (const { peer, conv } of items) {
+    const unread = conv ? (chat.unread[conv.id] || 0) : 0;
+    const isActive = chat.active && conv && chat.active.id === conv.id;
+    const av = peer.avatar_url
+      ? `<img class="chat-item-avatar" src="${escapeHtml(peer.avatar_url)}" alt=""/>`
+      : `<div class="chat-item-avatar-placeholder">${escapeHtml(initials(peer))}</div>`;
+    sidebarList.insertAdjacentHTML('beforeend', `
+      <div class="chat-item ${isActive ? 'active' : ''}" data-peer-id="${peer.id}" data-conv-id="${conv?.id || ''}">
+        ${av}
+        <div class="chat-item-info">
+          <div class="chat-item-name">${escapeHtml(fullName(peer))}</div>
+          <div class="chat-item-preview">${conv?.last_message_at ? 'Última actividad: ' + formatRelative(conv.last_message_at) : 'Sin mensajes'}</div>
+        </div>
+        ${unread > 0 ? `<span class="chat-item-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
+      </div>
+    `);
+  }
+
+  $$('.chat-item', sidebarList).forEach(el => {
+    el.onclick = () => openConversation(role, el.dataset.peerId);
+  });
+}
+
+function formatRelative(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  const diff = (now - d) / 1000;
+  if (diff < 60)        return 'recién';
+  if (diff < 3600)      return Math.floor(diff/60) + ' min';
+  if (diff < 86400)     return Math.floor(diff/3600) + ' h';
+  if (diff < 86400*7)   return Math.floor(diff/86400) + ' d';
+  return d.toLocaleDateString('es-AR');
+}
+
+// Abre (o crea) la conversación con un peer y la muestra en el panel principal.
+async function openConversation(role, peerId) {
+  const peer = chat.peers.find(p => p.id === peerId);
+  if (!peer) { toast('Usuario no encontrado','error'); return; }
+
+  // Determinar admin_id y mentor_id en función del rol del que llama
+  const admin_id  = role === 'mentor' ? peer.id : state.profile.id;
+  const mentor_id = role === 'mentor' ? state.profile.id : peer.id;
+
+  const { data: convId, error } = await db.rpc('get_or_create_conversation', {
+    p_admin_id:  admin_id,
+    p_mentor_id: mentor_id
+  });
+  if (error) {
+    console.error('get_or_create_conversation:', error);
+    toast('No se pudo abrir el chat: ' + error.message, 'error');
+    return;
+  }
+
+  chat.active = { id: convId, peer };
+
+  // Asegurar que la conversación esté en el cache local
+  if (!chat.conversations.find(c => c.id === convId)) {
+    chat.conversations.push({ id: convId, admin_id, mentor_id, last_message_at: null });
+  }
+
+  await loadMessages();
+  renderChatMain(role);
+  renderChatSidebar(role);  // refresca el "active" highlight
+
+  // Vista mobile: ocultar sidebar, mostrar chat
+  const layout = document.querySelector(`[data-chat-context="${role}"]`);
+  layout?.classList.add('has-active');
+}
+
+async function loadMessages() {
+  if (!chat.active) return;
+  const { data, error } = await db
+    .from('messages')
+    .select('id, conversation_id, sender_id, body, created_at, read_at')
+    .eq('conversation_id', chat.active.id)
+    .order('created_at', { ascending: true })
+    .limit(500);
+  if (error) {
+    console.error('loadMessages:', error);
+    return;
+  }
+  chat.messages = data || [];
+  // Marcar como leídos los que no envié yo y no están leídos
+  const unreadIds = chat.messages
+    .filter(m => m.sender_id !== state.profile.id && m.read_at === null)
+    .map(m => m.id);
+  if (unreadIds.length) {
+    await db.from('messages').update({ read_at: new Date().toISOString() }).in('id', unreadIds);
+    // limpiar contador local
+    chat.unread[chat.active.id] = 0;
+  }
+}
+
+function renderChatMain(role) {
+  const main = role === 'mentor' ? $('mnt-chat-main') : $('adm-chat-main');
+  if (!chat.active) {
+    main.innerHTML = role === 'mentor'
+      ? '<div class="chat-empty"><span>💬</span><p>Elegí un administrador para empezar a conversar.</p></div>'
+      : '<div class="chat-empty"><span>💬</span><p>Elegí un mentor de la lista o tocá "Nuevo".</p></div>';
+    return;
+  }
+  const peer = chat.active.peer;
+  const av = peer.avatar_url
+    ? `<img class="chat-header-avatar" src="${escapeHtml(peer.avatar_url)}" alt=""/>`
+    : `<div class="chat-header-avatar-placeholder">${escapeHtml(initials(peer))}</div>`;
+  main.innerHTML = `
+    <div class="chat-header">
+      <button class="chat-header-back" id="chat-back" aria-label="Volver">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,18 9,12 15,6"/></svg>
+      </button>
+      ${av}
+      <div class="chat-header-info">
+        <div class="chat-header-name">${escapeHtml(fullName(peer))}</div>
+        <div class="chat-header-sub">${escapeHtml(peer.email)}</div>
+      </div>
+    </div>
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="chat-composer">
+      <textarea id="chat-input" rows="1" placeholder="Escribí un mensaje..."></textarea>
+      <button id="chat-send" title="Enviar" aria-label="Enviar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  `;
+
+  renderMessages();
+
+  // Auto-resize del textarea
+  const ta = $('chat-input');
+  ta.addEventListener('input', () => {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+  });
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('chat-send').click(); }
+  });
+  ta.focus();
+
+  $('chat-send').onclick = () => sendMessage(role);
+  $('chat-back').onclick = () => {
+    const layout = document.querySelector(`[data-chat-context="${role}"]`);
+    layout?.classList.remove('has-active');
+    chat.active = null;
+    renderChatMain(role);
+  };
+}
+
+function renderMessages() {
+  const container = $('chat-messages');
+  if (!container) return;
+  container.innerHTML = '';
+
+  let lastDay = '';
+  for (const m of chat.messages) {
+    const d = new Date(m.created_at);
+    const dayKey = d.toLocaleDateString('es-AR');
+    if (dayKey !== lastDay) {
+      const today = new Date().toLocaleDateString('es-AR');
+      const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('es-AR');
+      const label = dayKey === today ? 'Hoy' : (dayKey === yesterday ? 'Ayer' : dayKey);
+      container.insertAdjacentHTML('beforeend', `<div class="chat-day-divider">${label}</div>`);
+      lastDay = dayKey;
+    }
+    const fromMe = m.sender_id === state.profile.id;
+    const hh = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+    container.insertAdjacentHTML('beforeend', `
+      <div class="msg-bubble ${fromMe ? 'from-me' : 'from-them'}">
+        ${escapeHtml(m.body).replace(/\n/g, '<br/>')}
+        <span class="msg-time">${hh}</span>
+      </div>
+    `);
+  }
+  // scroll al final
+  requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+}
+
+async function sendMessage(role) {
+  const ta = $('chat-input');
+  const body = ta.value.trim();
+  if (!body || !chat.active) return;
+  if (body.length > 4000) { toast('Mensaje demasiado largo (máx 4000 caracteres)', 'error'); return; }
+
+  const btn = $('chat-send'); btn.disabled = true;
+  // Optimistic: pintamos el mensaje al instante
+  const optimistic = {
+    id: 'tmp-' + Date.now(),
+    conversation_id: chat.active.id,
+    sender_id: state.profile.id,
+    body, created_at: new Date().toISOString(), read_at: null
+  };
+  chat.messages.push(optimistic);
+  renderMessages();
+  ta.value = ''; ta.style.height = 'auto';
+
+  const { data, error } = await db
+    .from('messages')
+    .insert({ conversation_id: chat.active.id, sender_id: state.profile.id, body })
+    .select()
+    .single();
+  btn.disabled = false;
+
+  if (error) {
+    // Revertir optimistic
+    chat.messages = chat.messages.filter(m => m.id !== optimistic.id);
+    renderMessages();
+    toast('No se pudo enviar: ' + error.message, 'error');
+    return;
+  }
+  // Reemplazar el optimistic con el real
+  const idx = chat.messages.findIndex(m => m.id === optimistic.id);
+  if (idx >= 0) chat.messages[idx] = data;
+  renderMessages();
+
+  // Refrescar last_message_at en el cache local (el trigger ya lo hizo en BD)
+  const conv = chat.conversations.find(c => c.id === chat.active.id);
+  if (conv) conv.last_message_at = data.created_at;
+  renderChatSidebar(role);
+}
+
+// Suscripción Realtime: escuchamos INSERT en messages de mis conversaciones
+function subscribeRealtime(role) {
+  unsubscribeRealtime();
+  if (!chat.conversations.length) return;
+
+  chat.realtimeChannel = db.channel('chat-' + state.profile.id)
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'messages'
+    }, async (payload) => {
+      const m = payload.new;
+      // Filtrar: ¿es de una conversación mía?
+      const conv = chat.conversations.find(c => c.id === m.conversation_id);
+      if (!conv) {
+        // Quizás es una conversación nueva creada por el otro lado.
+        // Recargo el listado para que aparezca.
+        await loadChat(role);
+        return;
+      }
+
+      // Si estoy en esa conversación, agregar mensaje al stream
+      if (chat.active && chat.active.id === m.conversation_id) {
+        // Evitar duplicado si fue mi propio mensaje (ya está vía optimistic + replace)
+        if (m.sender_id !== state.profile.id) {
+          chat.messages.push(m);
+          renderMessages();
+          // marcar como leído
+          await db.from('messages').update({ read_at: new Date().toISOString() }).eq('id', m.id);
+        }
+      } else if (m.sender_id !== state.profile.id) {
+        // Está en otra conversación → sumar a no leídos
+        chat.unread[m.conversation_id] = (chat.unread[m.conversation_id] || 0) + 1;
+        updateBadge(role);
+      }
+
+      // Refrescar el sidebar para que se mueva al tope
+      conv.last_message_at = m.created_at;
+      renderChatSidebar(role);
+    })
+    .subscribe();
+}
+
+function unsubscribeRealtime() {
+  if (chat.realtimeChannel) {
+    db.removeChannel(chat.realtimeChannel);
+    chat.realtimeChannel = null;
+  }
+}
+
+// Listeners propios del admin (búsqueda y "Nuevo")
+$('adm-chat-search')?.addEventListener('input', () => renderChatSidebar('admin'));
+
+$('adm-chat-new').onclick = () => {
+  const modal = $('modal-pick-mentor');
+  const list = $('pick-mentor-list');
+  $('pick-mentor-search').value = '';
+
+  const render = (q = '') => {
+    let items = chat.peers.slice();
+    const qq = q.toLowerCase();
+    if (qq) items = items.filter(p => [p.nombre,p.apellido,p.email]
+      .filter(Boolean).some(v => v.toLowerCase().includes(qq)));
+    items.sort((a,b) => fullName(a).localeCompare(fullName(b)));
+    if (!items.length) {
+      list.innerHTML = '<div class="empty-state" style="padding:20px"><p>No hay mentores.</p></div>';
+      return;
+    }
+    list.innerHTML = items.map(p => {
+      const av = p.avatar_url
+        ? `<img class="chat-item-avatar" src="${escapeHtml(p.avatar_url)}" alt=""/>`
+        : `<div class="chat-item-avatar-placeholder">${escapeHtml(initials(p))}</div>`;
+      return `
+        <div class="pick-item" data-id="${p.id}">
+          ${av}
+          <div class="chat-item-info">
+            <div class="chat-item-name">${escapeHtml(fullName(p))}</div>
+            <div class="chat-item-preview">${escapeHtml(p.email)}</div>
+          </div>
+        </div>`;
+    }).join('');
+    list.querySelectorAll('.pick-item').forEach(el => {
+      el.onclick = () => {
+        modal.classList.add('hidden');
+        openConversation('admin', el.dataset.id);
+      };
+    });
+  };
+  render();
+  $('pick-mentor-search').oninput = (e) => render(e.target.value);
+  modal.classList.remove('hidden');
+  setTimeout(() => $('pick-mentor-search').focus(), 50);
+};
+$('pick-mentor-close').onclick = () => $('modal-pick-mentor').classList.add('hidden');
 
 /* ═══════════════════════════════════════════════════════════════
    14. MODAL · Mi perfil (todos los roles)
