@@ -52,6 +52,86 @@ const state = {
 
 const PAGE_SIZE = 50;          // alumnos por página
 
+/* ─── Íconos de crecimiento ──────────────────────────────────
+   Nivel 0 — Sin contacto (semilla sin brotar)
+   Nivel 1 — Semilla: tiene fecha de primer contacto
+   Nivel 2 — Tallo: primer y último contacto son distintos (≥2 contactos)
+   Nivel 3 — Árbol: hubo videollamada o llamada telefónica
+   Baja    — Planta seca
+─────────────────────────────────────────────────────────────── */
+
+function getIconoCrecimiento(a) {
+  // Baja — planta seca
+  if (a.baja || a.eliminado) {
+    return `<div class="crecimiento-icon nivel-baja" title="Dado de baja">
+      <svg viewBox="0 0 40 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M20 52 Q20 38 20 28" stroke="#A89080" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M20 38 Q13 36 10 40" stroke="#A89080" stroke-width="2" stroke-linecap="round"/>
+        <path d="M20 32 Q27 30 29 34" stroke="#A89080" stroke-width="2" stroke-linecap="round"/>
+        <path d="M10 40 Q8 44 11 46 Q12 42 10 40Z" fill="#C4B8A8" opacity=".7"/>
+        <path d="M29 34 Q32 37 30 40 Q28 37 29 34Z" fill="#C4B8A8" opacity=".7"/>
+        <ellipse cx="16" cy="50" rx="4" ry="2" fill="#C4B8A8" opacity=".5" transform="rotate(-15 16 50)"/>
+        <ellipse cx="20" cy="52" rx="9" ry="3" fill="#BBA990" opacity=".4"/>
+      </svg>
+    </div>`;
+  }
+  // Nivel 3 — Árbol: videollamada realizada O llamada telefónica
+  const tipoContacto = (a.tipo_contacto || '').toLowerCase();
+  if (a.videollamada || tipoContacto.includes('videollamada') || tipoContacto.includes('llamada')) {
+    return `<div class="crecimiento-icon nivel-3" title="Videollamada o llamada realizada">
+      <svg viewBox="0 0 40 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="17" y="34" width="6" height="18" rx="2" fill="#8B6340"/>
+        <ellipse cx="20" cy="34" rx="13" ry="10" fill="#4A8F3F"/>
+        <ellipse cx="20" cy="24" rx="10" ry="8" fill="#5AA64D"/>
+        <ellipse cx="20" cy="16" rx="7" ry="7" fill="#6BBF5E"/>
+        <ellipse cx="17" cy="13" rx="2.5" ry="2" fill="#8FD97F" opacity=".6"/>
+      </svg>
+    </div>`;
+  }
+  // Nivel 2 — Tallo: tiene primer Y último contacto, y son distintos (≥2 contactos)
+  if (a.fecha_primer && a.fecha_ultimo && a.fecha_primer !== a.fecha_ultimo) {
+    return `<div class="crecimiento-icon nivel-2" title="Segundo contacto realizado">
+      <svg viewBox="0 0 40 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M20 52 Q20 30 20 18" stroke="#6B9A64" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M20 32 Q10 26 11 18 Q18 22 20 32Z" fill="#8FBF84"/>
+        <path d="M20 26 Q30 20 29 12 Q22 16 20 26Z" fill="#6B9A64"/>
+        <circle cx="20" cy="16" r="3.5" fill="#A8D49E"/>
+      </svg>
+    </div>`;
+  }
+  // Nivel 1 — Semilla: tiene fecha de primer contacto
+  if (a.fecha_primer) {
+    return `<div class="crecimiento-icon nivel-1" title="Primer contacto enviado">
+      <svg viewBox="0 0 40 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="20" cy="46" rx="10" ry="4" fill="#C4A882" opacity=".5"/>
+        <ellipse cx="20" cy="38" rx="7" ry="9" fill="#8B6340"/>
+        <path d="M20 30 Q24 35 20 40 Q16 35 20 30Z" fill="#C4925A" opacity=".7"/>
+        <path d="M20 29 Q20 24 20 22" stroke="#6B9A64" stroke-width="2" stroke-linecap="round"/>
+        <path d="M20 25 Q16 22 15 19" stroke="#6B9A64" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </div>`;
+  }
+  // Nivel 0 — Sin contacto
+  return `<div class="crecimiento-icon nivel-0" title="Sin contacto iniciado">
+    <svg viewBox="0 0 40 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="20" cy="46" rx="10" ry="4" fill="#D8D2C9" opacity=".4"/>
+      <ellipse cx="20" cy="40" rx="6" ry="7" fill="#D8D2C9" opacity=".5"/>
+    </svg>
+  </div>`;
+}
+
+function getNivelLabel(a) {
+  const tipoContacto = (a.tipo_contacto || '').toLowerCase();
+  if (a.baja || a.eliminado) return { label: 'Baja', cls: 'nivel-baja-label' };
+  if (a.videollamada || tipoContacto.includes('videollamada') || tipoContacto.includes('llamada'))
+    return { label: 'Árbol · Llamada realizada', cls: 'nivel-3-label' };
+  if (a.fecha_primer && a.fecha_ultimo && a.fecha_primer !== a.fecha_ultimo)
+    return { label: 'Tallo · 2 contactos', cls: 'nivel-2-label' };
+  if (a.fecha_primer)
+    return { label: 'Semilla · Primer contacto', cls: 'nivel-1-label' };
+  return { label: 'Sin contacto', cls: 'nivel-0-label' };
+}
+
 // Genera el mensaje de bienvenida con el nombre del mentor insertado.
 // Si el mentor ya tiene uno guardado, lo usa; si no, genera uno default.
 function getMensajeBienvenida(profile, alumno) {
@@ -548,7 +628,8 @@ function renderMentorRow(a) {
         : '<span class="alumno-card-tag tag-sin">pausa</span>';
   return `
     <article class="alumno-card alumno-mentor-card ${eliminado ? 'is-eliminado' : ''}" data-id="${a.id}">
-      <div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <div class="crecimiento-icon-mini">${getIconoCrecimiento(a)}</div>
         <div class="alumno-card-name">${escapeHtml(a.apellido)}, ${escapeHtml(a.nombre)}</div>
       </div>
       <div class="alumno-card-meta list-col-fecha">
@@ -567,23 +648,32 @@ function renderMentorCard(a) {
   const dias = a.fecha_ultimo ? diffDays(a.fecha_ultimo) : null;
   const alerta = dias !== null && dias > 14;
   const eliminado = !!a.eliminado;
+  const nivel = getNivelLabel(a);
   return `
     <article class="alumno-card alumno-mentor-card ${eliminado ? 'is-eliminado' : ''}" data-id="${a.id}">
-      <div class="alumno-card-head">
-        <span class="alumno-card-name">${escapeHtml(a.nombre)} ${escapeHtml(a.apellido)}</span>
-        ${eliminado
-          ? '<span class="alumno-card-tag tag-eliminado">quitado</span>'
-          : a.baja
-            ? '<span class="alumno-card-tag tag-baja">baja</span>'
-            : a.activa
-              ? '<span class="alumno-card-tag tag-asignado">activa</span>'
-              : '<span class="alumno-card-tag tag-sin">pausa</span>'}
+      ${alerta && !eliminado ? `<div class="card-alerta-banner">⚠️ Sin contacto hace ${dias} día${dias === 1 ? '' : 's'}</div>` : ''}
+      <div class="card-top-row">
+        <div class="card-top-info">
+          <div class="alumno-card-name">${escapeHtml(a.nombre)} ${escapeHtml(a.apellido)}</div>
+          ${a.telefono ? `<div class="card-telefono">📞 ${escapeHtml(a.telefono)}</div>` : ''}
+          <div class="card-nivel-label ${nivel.cls}">${nivel.label}</div>
+        </div>
+        <div class="card-top-right">
+          ${getIconoCrecimiento(a)}
+          ${eliminado
+            ? '<span class="alumno-card-tag tag-eliminado">quitado</span>'
+            : a.baja
+              ? '<span class="alumno-card-tag tag-baja">baja</span>'
+              : a.activa
+                ? '<span class="card-badge-activa activa-si"><svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg> Activa</span>'
+                : '<span class="card-badge-activa activa-no"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg> Inactiva</span>'}
+        </div>
       </div>
       <div class="alumno-card-meta">
-        ${a.telefono ? `📞 ${escapeHtml(a.telefono)}<br/>` : ''}
-        Último contacto: <strong>${formatDate(a.fecha_ultimo)}</strong>
-        ${alerta && !eliminado ? ' · <span style="color:#C4825A">⚠ ' + dias + ' días</span>' : ''}
-        ${a.respondio ? `<br/>Respondió: <strong>${escapeHtml(a.respondio)}</strong>` : ''}
+        ${a.tipo_contacto ? `<span class="card-meta-item">📞 ${escapeHtml(a.tipo_contacto)}</span>` : ''}
+        ${a.respondio ? `<span class="card-meta-item">✓ Respondió: <strong>${escapeHtml(a.respondio)}</strong></span>` : ''}
+        ${a.fecha_ultimo ? `<span class="card-meta-item">📅 ${formatDate(a.fecha_ultimo)}</span>` : ''}
+        ${alerta && !eliminado ? `<span style="color:#C4825A"> · ⚠ ${dias} días</span>` : ''}
       </div>
       ${eliminado ? '<div class="alumno-removed-banner">Este alumno fue quitado de las mentorías</div>' : ''}
     </article>`;
@@ -2283,6 +2373,23 @@ function openDetail(alumnoId) {
   const telefono = formatPhone(a.telefono);
 
   $('detail-body').innerHTML = `
+    <!-- Crecimiento + estado -->
+    <div class="detail-crecimiento-row">
+      <div class="detail-crecimiento-visual">
+        ${getIconoCrecimiento(a)}
+        <div class="detail-crecimiento-label ${getNivelLabel(a).cls}">
+          ${getNivelLabel(a).label}
+        </div>
+      </div>
+      <div class="detail-activa-badge ${a.activa && !a.baja ? 'activa-si' : 'activa-no'}">
+        ${a.baja
+          ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg> Baja`
+          : a.activa
+            ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg> Activa`
+            : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg> Inactiva`}
+      </div>
+    </div>
+
     <!-- Mini Calendario -->
     <div class="detail-section">
       <div class="detail-section-title">Calendario de contactos</div>
