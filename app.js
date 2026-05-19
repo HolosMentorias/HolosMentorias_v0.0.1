@@ -1200,10 +1200,6 @@ function renderSuperUsuarios() {
 
   let rows = state.superUsers.slice();
   const f = state.superFilter;
-  if (f === 'super_admin') rows = rows.filter(u => u.rol === 'super_admin');
-  if (f === 'admin')       rows = rows.filter(u => u.rol === 'admin');
-  if (f === 'mentor')      rows = rows.filter(u => u.rol === 'mentor');
-  if (f === 'sin-rol')     rows = rows.filter(u => !u.rol);
 
   if (state.superSearch) {
     const q = state.superSearch.toLowerCase();
@@ -1211,7 +1207,7 @@ function renderSuperUsuarios() {
       .filter(Boolean).some(v => v.toLowerCase().includes(q)));
   }
 
-  // Stats
+  // Stats (siempre sobre el total, sin filtro)
   $('sup-stat-total').textContent      = state.superUsers.length;
   $('sup-stat-admins').textContent     = state.superUsers.filter(u => u.rol === 'admin').length;
   $('sup-stat-mentores').textContent   = state.superUsers.filter(u => u.rol === 'mentor').length;
@@ -1222,31 +1218,46 @@ function renderSuperUsuarios() {
     return;
   }
 
-  for (const u of rows) {
-    const av = u.avatar_url
-      ? `<img class="user-row-avatar" src="${escapeHtml(u.avatar_url)}" alt=""/>`
-      : `<div class="user-row-avatar-placeholder">${escapeHtml(initials(u))}</div>`;
-    const isSelf = u.id === state.profile.id;
+  // Con filtro específico: lista plana sin encabezado
+  if (f !== 'all') {
+    const filtrados = rows.filter(u => {
+      if (f === 'super_admin') return u.rol === 'super_admin';
+      if (f === 'admin')       return u.rol === 'admin';
+      if (f === 'mentor')      return u.rol === 'mentor';
+      if (f === 'sin-rol')     return !u.rol;
+      return true;
+    });
+    if (!filtrados.length) {
+      list.innerHTML = '<div class="empty-state"><span>🌿</span><p>No hay usuarios en este filtro.</p></div>';
+      return;
+    }
+    renderUserGroup(list, filtrados, 'super');
+    return;
+  }
+
+  // Sin filtro: agrupar por rol con encabezados
+  const grupos = [
+    { label: 'Super Administradores', icon: '👑', items: rows.filter(u => u.rol === 'super_admin') },
+    { label: 'Administradores',       icon: '🛡️', items: rows.filter(u => u.rol === 'admin') },
+    { label: 'Mentores',              icon: '🌱', items: rows.filter(u => u.rol === 'mentor') },
+    { label: 'Sin rol asignado',      icon: '⏳', items: rows.filter(u => !u.rol) },
+  ];
+
+  let hayAlgo = false;
+  for (const grupo of grupos) {
+    if (!grupo.items.length) continue;
+    hayAlgo = true;
     list.insertAdjacentHTML('beforeend', `
-      <div class="user-row ${u.activo ? '' : 'inactive'}" data-id="${u.id}">
-        ${av}
-        <div class="user-row-info">
-          <div class="user-row-name">${escapeHtml(fullName(u))}${isSelf ? ' <span class="role-badge role-super">vos</span>' : ''}</div>
-          <div class="user-row-email">${escapeHtml(u.email)}</div>
-        </div>
-        <div class="user-row-controls">
-          <select class="user-rol-select" data-id="${u.id}" ${isSelf ? 'disabled' : ''}>
-            <option value=""            ${!u.rol            ? 'selected':''}>— Sin rol —</option>
-            <option value="mentor"      ${u.rol==='mentor'  ? 'selected':''}>Mentor</option>
-            <option value="admin"       ${u.rol==='admin'   ? 'selected':''}>Admin</option>
-            <option value="super_admin" ${u.rol==='super_admin' ? 'selected':''}>Super admin</option>
-          </select>
-          <button class="btn-mini-danger btn-toggle-active" data-id="${u.id}" ${isSelf ? 'disabled' : ''} title="${u.activo ? 'Desactivar' : 'Activar'}">
-            ${u.activo ? 'Desactivar' : 'Activar'}
-          </button>
-        </div>
+      <div class="user-group-header">
+        <span class="user-group-icon">${grupo.icon}</span>
+        <span class="user-group-label">${grupo.label}</span>
+        <span class="user-group-count">${grupo.items.length}</span>
       </div>
     `);
+    renderUserGroup(list, grupo.items, 'super');
+  }
+  if (!hayAlgo) {
+    list.innerHTML = '<div class="empty-state"><span>🌿</span><p>No hay resultados para esa búsqueda.</p></div>';
   }
 
   // Bindings
@@ -1256,6 +1267,62 @@ function renderSuperUsuarios() {
   $$('.btn-toggle-active', list).forEach(btn => {
     btn.onclick = () => toggleActive(btn.dataset.id);
   });
+}
+
+function renderUserGroup(container, users, context) {
+  for (const u of users) {
+    const av = u.avatar_url
+      ? `<img class="user-row-avatar" src="${escapeHtml(u.avatar_url)}" alt=""/>`
+      : `<div class="user-row-avatar-placeholder">${escapeHtml(initials(u))}</div>`;
+    const isSelf = u.id === state.profile.id;
+    const isSuperCtx = context === 'super';
+
+    const rolSelect = isSuperCtx ? `
+      <select class="user-rol-select" data-id="${u.id}" ${isSelf ? 'disabled' : ''}>
+        <option value=""            ${!u.rol                ? 'selected':''}>— Sin rol —</option>
+        <option value="mentor"      ${u.rol==='mentor'      ? 'selected':''}>Mentor</option>
+        <option value="admin"       ${u.rol==='admin'       ? 'selected':''}>Admin</option>
+        <option value="super_admin" ${u.rol==='super_admin' ? 'selected':''}>Super admin</option>
+      </select>
+      <button class="btn-mini-danger btn-toggle-active" data-id="${u.id}"
+        ${isSelf ? 'disabled' : ''} title="${u.activo ? 'Desactivar' : 'Activar'}">
+        ${u.activo ? 'Desactivar' : 'Activar'}
+      </button>` : `
+      <select class="user-rol-select admU-rol-select" data-id="${u.id}">
+        <option value=""       ${!u.rol           ? 'selected':''}>— Sin rol —</option>
+        <option value="mentor" ${u.rol==='mentor' ? 'selected':''}>Mentor</option>
+        <option value="admin"  ${u.rol==='admin'  ? 'selected':''}>Admin</option>
+      </select>`;
+
+    container.insertAdjacentHTML('beforeend', `
+      <div class="user-row ${u.activo ? '' : 'inactive'}" data-id="${u.id}">
+        ${av}
+        <div class="user-row-info">
+          <div class="user-row-name">
+            ${escapeHtml(fullName(u))}
+            ${isSelf ? ' <span class="role-badge role-super">vos</span>' : ''}
+            ${!u.activo ? ' <span class="role-badge role-none">inactivo</span>' : ''}
+          </div>
+          <div class="user-row-email">${escapeHtml(u.email)}</div>
+        </div>
+        <div class="user-row-controls">${rolSelect}</div>
+      </div>
+    `);
+  }
+
+  // Bindings según contexto
+  if (context === 'super') {
+    $$('.user-rol-select:not(.admU-rol-select)', container).forEach(sel => {
+      sel.onchange = () => changeRole(sel.dataset.id, sel.value || null);
+    });
+    $$('.btn-toggle-active', container).forEach(btn => {
+      btn.onclick = () => toggleActive(btn.dataset.id);
+    });
+  } else {
+    $$('.admU-rol-select', container).forEach(sel => {
+      sel.onchange = () => changeRoleAsAdmin(sel.dataset.id, sel.value || null);
+    });
+  }
 }
 
 $$('#sup-filter-chips .chip').forEach(chip => {
@@ -1335,9 +1402,6 @@ function renderAdminUsuarios() {
 
   let rows = state.adminUsers.slice();
   const f = state.adminUsersFilter;
-  if (f === 'admin')   rows = rows.filter(u => u.rol === 'admin');
-  if (f === 'mentor')  rows = rows.filter(u => u.rol === 'mentor');
-  if (f === 'sin-rol') rows = rows.filter(u => !u.rol);
 
   if (state.adminUsersSearch) {
     const q = state.adminUsersSearch.toLowerCase();
@@ -1345,7 +1409,7 @@ function renderAdminUsuarios() {
       .filter(Boolean).some(v => v.toLowerCase().includes(q)));
   }
 
-  // Stats — sobre el universo visible al admin
+  // Stats
   $('admU-stat-total').textContent      = state.adminUsers.length;
   $('admU-stat-admins').textContent     = state.adminUsers.filter(u => u.rol === 'admin').length;
   $('admU-stat-mentores').textContent   = state.adminUsers.filter(u => u.rol === 'mentor').length;
@@ -1356,31 +1420,45 @@ function renderAdminUsuarios() {
     return;
   }
 
-  for (const u of rows) {
-    const av = u.avatar_url
-      ? `<img class="user-row-avatar" src="${escapeHtml(u.avatar_url)}" alt=""/>`
-      : `<div class="user-row-avatar-placeholder">${escapeHtml(initials(u))}</div>`;
-    list.insertAdjacentHTML('beforeend', `
-      <div class="user-row ${u.activo ? '' : 'inactive'}" data-id="${u.id}">
-        ${av}
-        <div class="user-row-info">
-          <div class="user-row-name">${escapeHtml(fullName(u))}</div>
-          <div class="user-row-email">${escapeHtml(u.email)}</div>
-        </div>
-        <div class="user-row-controls">
-          <select class="user-rol-select admU-rol-select" data-id="${u.id}">
-            <option value=""        ${!u.rol            ? 'selected':''}>— Sin rol —</option>
-            <option value="mentor"  ${u.rol==='mentor'  ? 'selected':''}>Mentor</option>
-            <option value="admin"   ${u.rol==='admin'   ? 'selected':''}>Admin</option>
-          </select>
-        </div>
-      </div>
-    `);
+  // Con filtro específico: lista plana
+  if (f !== 'all') {
+    const filtrados = rows.filter(u => {
+      if (f === 'admin')   return u.rol === 'admin';
+      if (f === 'mentor')  return u.rol === 'mentor';
+      if (f === 'sin-rol') return !u.rol;
+      return true;
+    });
+    if (!filtrados.length) {
+      list.innerHTML = '<div class="empty-state"><span>🌿</span><p>No hay usuarios en este filtro.</p></div>';
+      return;
+    }
+    renderUserGroup(list, filtrados, 'admin');
+    return;
   }
 
-  $$('.admU-rol-select', list).forEach(sel => {
-    sel.onchange = () => changeRoleAsAdmin(sel.dataset.id, sel.value || null);
-  });
+  // Sin filtro: grupos con encabezado
+  const grupos = [
+    { label: 'Administradores',  icon: '🛡️', items: rows.filter(u => u.rol === 'admin') },
+    { label: 'Mentores',         icon: '🌱', items: rows.filter(u => u.rol === 'mentor') },
+    { label: 'Sin rol asignado', icon: '⏳', items: rows.filter(u => !u.rol) },
+  ];
+
+  let hayAlgo = false;
+  for (const grupo of grupos) {
+    if (!grupo.items.length) continue;
+    hayAlgo = true;
+    list.insertAdjacentHTML('beforeend', `
+      <div class="user-group-header">
+        <span class="user-group-icon">${grupo.icon}</span>
+        <span class="user-group-label">${grupo.label}</span>
+        <span class="user-group-count">${grupo.items.length}</span>
+      </div>
+    `);
+    renderUserGroup(list, grupo.items, 'admin');
+  }
+  if (!hayAlgo) {
+    list.innerHTML = '<div class="empty-state"><span>🌿</span><p>No hay resultados.</p></div>';
+  }
 }
 
 async function changeRoleAsAdmin(userId, newRole) {

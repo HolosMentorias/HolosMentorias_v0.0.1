@@ -2881,3 +2881,53 @@ input:checked + .switch-track-video { background: #3B82F6; }
 }
 .btn-config-msg:hover { border-color: var(--accent); color: var(--accent-dark); }
 
+
+
+/* ═══════════════════════════════════════════════════════════════
+   HOLOS · Grupos de usuarios (admins separados de mentores)
+═══════════════════════════════════════════════════════════════ */
+
+.user-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 4px 8px;
+  margin-top: 6px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 4px;
+}
+.user-group-header:first-child {
+  margin-top: 0;
+  padding-top: 4px;
+}
+.user-group-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+.user-group-label {
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--text-primary);
+  font-weight: 400;
+  flex: 1;
+}
+.user-group-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* Separación visual entre filas de grupos distintos */
+.users-list .user-row:last-of-type {
+  margin-bottom: 4px;
+}
+
