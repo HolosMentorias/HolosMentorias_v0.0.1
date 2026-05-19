@@ -2931,3 +2931,112 @@ input:checked + .switch-track-video { background: #3B82F6; }
   margin-bottom: 4px;
 }
 
+
+
+/* ═══════════════════════════════════════════════════════════════
+   HOLOS · Toast de notificación de mensaje nuevo
+   Aparece en cualquier pestaña cuando llega un mensaje.
+   Distinto al toast genérico: tiene avatar, preview y acción.
+═══════════════════════════════════════════════════════════════ */
+
+.notif-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  z-index: 9999;
+  max-width: 340px;
+  width: calc(100vw - 48px);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity .25s ease, transform .25s ease;
+}
+.notif-toast.notif-toast-enter {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.notif-toast.notif-toast-exit {
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+}
+.notif-toast-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12), 0 2px 8px rgba(0,0,0,.06);
+}
+.notif-toast-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.notif-toast-body {
+  flex: 1;
+  min-width: 0;
+}
+.notif-toast-sender {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notif-toast-preview {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+.notif-toast-action {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+.notif-toast-action:hover { background: var(--accent-dark); }
+.notif-toast-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  flex-shrink: 0;
+  transition: var(--transition);
+  line-height: 1;
+}
+.notif-toast-close:hover { color: var(--text-primary); }
+
+/* En mobile: aparece desde arriba para no tapar la barra inferior */
+@media (max-width: 599px) {
+  .notif-toast {
+    top: 16px;
+    bottom: auto;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+    transform: translateY(-12px);
+  }
+  .notif-toast.notif-toast-enter { transform: translateY(0); }
+  .notif-toast.notif-toast-exit  { transform: translateY(-12px); }
+}
+

@@ -321,6 +321,9 @@ $('btn-reset').onclick = async () => {
 $('reset-email').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-reset').click(); });
 
 $('btn-logout').onclick = async () => {
+  // Cerrar todos los canales de Realtime antes de desloguear
+  if (chat.globalChannel) { db.removeChannel(chat.globalChannel); chat.globalChannel = null; }
+  if (chat.realtimeChannel) { db.removeChannel(chat.realtimeChannel); chat.realtimeChannel = null; }
   await db.auth.signOut();
   state.session = null; state.profile = null;
   showScreen('login-screen');
@@ -372,6 +375,13 @@ async function bootstrapSession() {
   renderHeader();
   configureNavForRole(prof.rol);
   showScreen('app-screen');
+
+  // Arrancar notificaciones globales de chat (activas toda la sesión,
+  // independientemente de en qué pestaña esté el usuario)
+  if (prof.rol !== 'super_admin') {
+    const roleForChat = prof.rol; // 'admin' o 'mentor'
+    startGlobalNotifications(roleForChat);
+  }
 
   // Vista inicial según rol
   const defaultView = {
@@ -1509,10 +1519,13 @@ $('admU-search-users').addEventListener('input', e => {
 const chat = {
   conversations: [],
   peers: [],
-  active: null,         // { id, peer: profile }
+  active: null,
   messages: [],
-  realtimeChannel: null,
-  unread: {},           // map conversationId -> número de no leídos
+  realtimeChannel: null,   // canal local (sólo activo en la pestaña de mensajes)
+  globalChannel: null,     // canal global (activo durante toda la sesión)
+  globalConversations: [], // copia de las conversaciones para el canal global
+  recentlyReadIds: new Set(), // ids marcados como leídos en el canal local
+  unread: {},
 };
 
 // Carga la lista de conversaciones del usuario + los peers disponibles.
@@ -1837,43 +1850,47 @@ async function sendMessage(role) {
   renderChatSidebar(role);
 }
 
-// Suscripción Realtime: escuchamos INSERT en messages de mis conversaciones
+// Suscripción Realtime: escuchamos INSERT en messages de mis conversaciones.
+// Esta función se llama desde loadChat (cuando abrís la pestaña de Mensajes)
+// y gestiona el canal local que actualiza el stream de burbujas en tiempo real.
 function subscribeRealtime(role) {
-  unsubscribeRealtime();
+  // NO desuscribimos el canal global de notificaciones (chat.globalChannel).
+  // Sólo manejamos el canal local de la vista de chat activa.
+  if (chat.realtimeChannel) {
+    db.removeChannel(chat.realtimeChannel);
+    chat.realtimeChannel = null;
+  }
   if (!chat.conversations.length) return;
 
-  chat.realtimeChannel = db.channel('chat-' + state.profile.id)
+  chat.realtimeChannel = db.channel('chat-local-' + state.profile.id)
     .on('postgres_changes', {
       event: 'INSERT',
       schema: 'public',
       table: 'messages'
     }, async (payload) => {
       const m = payload.new;
-      // Filtrar: ¿es de una conversación mía?
       const conv = chat.conversations.find(c => c.id === m.conversation_id);
       if (!conv) {
-        // Quizás es una conversación nueva creada por el otro lado.
-        // Recargo el listado para que aparezca.
         await loadChat(role);
         return;
       }
 
-      // Si estoy en esa conversación, agregar mensaje al stream
+      // Si estoy mirando esa conversación: agregar burbuja + marcar leído
       if (chat.active && chat.active.id === m.conversation_id) {
-        // Evitar duplicado si fue mi propio mensaje (ya está vía optimistic + replace)
         if (m.sender_id !== state.profile.id) {
           chat.messages.push(m);
           renderMessages();
-          // marcar como leído
           await db.from('messages').update({ read_at: new Date().toISOString() }).eq('id', m.id);
+          // El canal global también habría disparado este mensaje; ignorarlo ahí
+          chat.recentlyReadIds = chat.recentlyReadIds || new Set();
+          chat.recentlyReadIds.add(m.id);
         }
       } else if (m.sender_id !== state.profile.id) {
-        // Está en otra conversación → sumar a no leídos
+        // En otra conversación del chat → sumar badge local
         chat.unread[m.conversation_id] = (chat.unread[m.conversation_id] || 0) + 1;
         updateBadge(role);
       }
 
-      // Refrescar el sidebar para que se mueva al tope
       conv.last_message_at = m.created_at;
       renderChatSidebar(role);
     })
@@ -1881,10 +1898,167 @@ function subscribeRealtime(role) {
 }
 
 function unsubscribeRealtime() {
+  // Sólo cancela el canal local de la vista de chat.
+  // El canal global (chat.globalChannel) se mantiene activo siempre.
   if (chat.realtimeChannel) {
     db.removeChannel(chat.realtimeChannel);
     chat.realtimeChannel = null;
   }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   CANAL GLOBAL DE NOTIFICACIONES
+   Se inicia al loguear y permanece activo toda la sesión.
+   Muestra toasts y actualiza badges sin importar en qué
+   pestaña esté el usuario.
+────────────────────────────────────────────────────────────── */
+
+async function startGlobalNotifications(role) {
+  // Limpiar canal anterior si existía (por ejemplo, al re-loguearse)
+  if (chat.globalChannel) {
+    db.removeChannel(chat.globalChannel);
+    chat.globalChannel = null;
+  }
+
+  // Cargar conversaciones iniciales para saber cuáles son "mías"
+  // y calcular el badge al entrar.
+  await refreshGlobalUnread(role);
+
+  chat.globalChannel = db.channel('chat-global-' + state.profile.id)
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'messages'
+    }, async (payload) => {
+      const m = payload.new;
+
+      // Ignorar mensajes propios
+      if (m.sender_id === state.profile.id) return;
+
+      // Ignorar mensajes que ya marcamos como leídos desde la vista de chat
+      if (chat.recentlyReadIds?.has(m.id)) {
+        chat.recentlyReadIds.delete(m.id);
+        return;
+      }
+
+      // ¿Es de una conversación mía?
+      let conv = chat.globalConversations?.find(c => c.id === m.conversation_id);
+
+      if (!conv) {
+        // Conversación nueva iniciada por el otro — refrescar lista
+        const { data } = await db
+          .from('conversations')
+          .select('id, admin_id, mentor_id, last_message_at')
+          .eq('is_broadcast', false);
+        chat.globalConversations = data || [];
+        conv = chat.globalConversations.find(c => c.id === m.conversation_id);
+        if (!conv) return; // no es mía
+      }
+
+      // Si el usuario está en la pestaña de mensajes mirando esta conversación
+      // y el canal local ya la procesó, no duplicar
+      const enChatActivo = state.currentView?.endsWith('-mensajes') &&
+                           chat.active?.id === m.conversation_id;
+      if (enChatActivo) return;
+
+      // Actualizar badge
+      chat.unread[m.conversation_id] = (chat.unread[m.conversation_id] || 0) + 1;
+      updateBadge(role);
+
+      // Si el usuario está en la pestaña de mensajes pero en OTRA conversación,
+      // refrescar el sidebar (el canal local también lo hará, pero es rápido)
+      if (state.currentView?.endsWith('-mensajes')) {
+        conv.last_message_at = m.created_at;
+        if (chat.conversations.length) renderChatSidebar(role);
+      }
+
+      // Toast de notificación con el nombre del remitente
+      const sender = await getSenderName(m.sender_id);
+      const preview = m.body.length > 50 ? m.body.slice(0, 50) + '…' : m.body;
+      showNotifToast(sender, preview, role);
+    })
+    .subscribe();
+}
+
+// Cache de nombres de remitentes para no hacer una query por cada mensaje
+const senderCache = new Map();
+async function getSenderName(userId) {
+  if (senderCache.has(userId)) return senderCache.get(userId);
+  const { data } = await db.from('profiles')
+    .select('nombre, apellido, email').eq('id', userId).single();
+  const name = data ? fullName(data) : 'Alguien';
+  senderCache.set(userId, name);
+  return name;
+}
+
+// Carga el conteo inicial de no leídos al entrar (para el badge desde el arranque)
+async function refreshGlobalUnread(role) {
+  const { data: convData } = await db
+    .from('conversations')
+    .select('id, admin_id, mentor_id, last_message_at')
+    .eq('is_broadcast', false);
+  chat.globalConversations = convData || [];
+
+  if (!chat.globalConversations.length) { updateBadge(role); return; }
+
+  const ids = chat.globalConversations.map(c => c.id);
+  const { data: unreadData } = await db
+    .from('messages')
+    .select('conversation_id')
+    .in('conversation_id', ids)
+    .neq('sender_id', state.profile.id)
+    .is('read_at', null);
+
+  chat.unread = {};
+  for (const m of (unreadData || [])) {
+    chat.unread[m.conversation_id] = (chat.unread[m.conversation_id] || 0) + 1;
+  }
+  updateBadge(role);
+}
+
+// Toast de notificación de mensaje nuevo — distinto al toast genérico,
+// más discreto y con acción de "ir a mensajes"
+function showNotifToast(sender, preview, role) {
+  // Crear o reusar el elemento de notif-toast
+  let nt = document.getElementById('notif-toast');
+  if (!nt) {
+    nt = document.createElement('div');
+    nt.id = 'notif-toast';
+    document.body.appendChild(nt);
+  }
+
+  nt.innerHTML = `
+    <div class="notif-toast-inner">
+      <div class="notif-toast-icon">💬</div>
+      <div class="notif-toast-body">
+        <div class="notif-toast-sender">${escapeHtml(sender)}</div>
+        <div class="notif-toast-preview">${escapeHtml(preview)}</div>
+      </div>
+      <button class="notif-toast-action">Ver</button>
+      <button class="notif-toast-close" aria-label="Cerrar">✕</button>
+    </div>
+  `;
+
+  nt.className = 'notif-toast notif-toast-enter';
+
+  // "Ver" → ir a la pestaña de mensajes
+  nt.querySelector('.notif-toast-action').onclick = () => {
+    nt.className = 'notif-toast notif-toast-exit';
+    const view = role === 'mentor' ? 'mentor-mensajes' : 'admin-mensajes';
+    switchView(view);
+    $$('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+  };
+
+  // Cerrar manual
+  nt.querySelector('.notif-toast-close').onclick = () => {
+    nt.className = 'notif-toast notif-toast-exit';
+  };
+
+  // Auto-cerrar después de 6 segundos
+  clearTimeout(nt._timer);
+  nt._timer = setTimeout(() => {
+    nt.className = 'notif-toast notif-toast-exit';
+  }, 6000);
 }
 
 // Listeners propios del admin (búsqueda y "Nuevo")
