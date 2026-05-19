@@ -428,7 +428,7 @@ async function bootstrapSession() {
   // Cargar perfil del usuario
   const { data: prof, error } = await db
     .from('profiles')
-    .select('id,email,rol,nombre,apellido,avatar_url,activo')
+    .select('id,email,rol,nombre,apellido,avatar_url,activo,puede_ver_estadisticas,mensaje_bienvenida')
     .eq('id', session.user.id)
     .single();
 
@@ -489,14 +489,21 @@ function renderHeader() {
 function configureNavForRole(rol) {
   $$('.nav-tab').forEach(tab => {
     const reqRole = tab.dataset.role;
-    const visible =
-      (rol === 'super_admin') ||                  // super ve todo
+    let visible =
+      (rol === 'super_admin') ||
       (rol === 'admin' && reqRole === 'admin') ||
       (rol === 'mentor' && reqRole === 'mentor');
+
+    // La pestaña de estadísticas sólo se muestra si el admin tiene el permiso.
+    // El super_admin siempre la ve.
+    if (tab.dataset.view === 'admin-estadisticas') {
+      visible = (rol === 'super_admin') ||
+                (rol === 'admin' && !!state.profile.puede_ver_estadisticas);
+    }
+
     tab.classList.toggle('visible', visible);
   });
 
-  // Listeners de tabs
   $$('.nav-tab').forEach(tab => {
     tab.onclick = () => switchView(tab.dataset.view);
   });
@@ -521,6 +528,7 @@ function switchView(viewId) {
   if (viewId === 'mentor-mensajes')  loadChat('mentor');
   if (viewId === 'admin-alumnos')    loadAdminAlumnos();
   if (viewId === 'admin-mentores')   loadAdminMentores();
+  if (viewId === 'admin-estadisticas') loadEstadisticas();
   if (viewId === 'admin-mensajes')   loadChat('admin');
   if (viewId === 'admin-usuarios')   loadAdminUsuarios();
   if (viewId === 'super-usuarios')   loadSuperUsuarios();
@@ -1304,7 +1312,7 @@ $('btn-export-pdf').onclick = () => exportarInformeMentor(state.profile.id);
 async function loadSuperUsuarios() {
   const { data, error } = await db
     .from('profiles')
-    .select('id,email,rol,nombre,apellido,avatar_url,activo,created_at')
+    .select('id,email,rol,nombre,apellido,avatar_url,activo,puede_ver_estadisticas,created_at')
     .order('created_at', { ascending: false });
 
   if (error) { toast('Error al cargar usuarios','error'); return; }
@@ -1402,6 +1410,13 @@ function renderUserGroup(container, users, context) {
         <option value="admin"       ${u.rol==='admin'       ? 'selected':''}>Admin</option>
         <option value="super_admin" ${u.rol==='super_admin' ? 'selected':''}>Super admin</option>
       </select>
+      ${u.rol === 'admin' ? `
+        <button class="toggle-stats ${u.puede_ver_estadisticas ? 'active' : ''}"
+          data-id="${u.id}" data-activo="${u.puede_ver_estadisticas ? '1' : '0'}"
+          title="${u.puede_ver_estadisticas ? 'Desactivar estadísticas' : 'Activar estadísticas'}">
+          <span class="toggle-stats-dot"></span>
+          Estadísticas
+        </button>` : ''}
       <button class="btn-mini-danger btn-toggle-active" data-id="${u.id}"
         ${isSelf ? 'disabled' : ''} title="${u.activo ? 'Desactivar' : 'Activar'}">
         ${u.activo ? 'Desactivar' : 'Activar'}
@@ -1435,6 +1450,12 @@ function renderUserGroup(container, users, context) {
     });
     $$('.btn-toggle-active', container).forEach(btn => {
       btn.onclick = () => toggleActive(btn.dataset.id);
+    });
+    $$('.toggle-stats', container).forEach(btn => {
+      btn.onclick = () => {
+        const activo = btn.dataset.activo === '1';
+        toggleEstadisticasPermiso(btn.dataset.id, !activo);
+      };
     });
   } else {
     $$('.admU-rol-select', container).forEach(sel => {
@@ -1491,6 +1512,245 @@ async function toggleActive(userId) {
     return;
   }
   toast('Usuario actualizado ✓');
+  loadSuperUsuarios();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VISTA ADMIN/SUPER · "Estadísticas"
+   Efectividad por mentor calculada client-side sobre los datos
+   ya cargados (no requiere tablas nuevas en BD).
+═══════════════════════════════════════════════════════════════ */
+
+let statsSort = 'efectividad';
+
+async function loadEstadisticas() {
+  // Verificar permiso (doble check: RLS en BD, UI aquí)
+  const puedeVer = state.profile.rol === 'super_admin' || !!state.profile.puede_ver_estadisticas;
+  $('stats-sin-permiso').classList.toggle('hidden', puedeVer);
+  $('stats-contenido').classList.toggle('hidden', !puedeVer);
+  if (!puedeVer) return;
+
+  $('stats-mentor-list').innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Calculando estadísticas...</p></div>';
+
+  // Cargar datos frescos siempre (no usar cache para evitar datos desactualizados)
+  const [alumnosRes, mentoresRes] = await Promise.all([
+    db.from('alumnos')
+      .select('id,nombre,apellido,mentor_id,fecha_primer,fecha_ultimo,tipo_contacto,videollamada,respondio,activa,baja,eliminado')
+      .eq('eliminado', false)
+      .eq('baja', false),
+    db.from('profiles')
+      .select('id,nombre,apellido,email,avatar_url,rol')
+      .eq('rol', 'mentor')
+      .eq('activo', true)
+  ]);
+
+  if (alumnosRes.error || mentoresRes.error) {
+    toast('Error al cargar estadísticas', 'error');
+    return;
+  }
+
+  const todosAlumnos = alumnosRes.data || [];
+  const mentores     = mentoresRes.data || [];
+
+  // Calcular métricas por mentor
+  const metricasMentor = mentores.map(mentor => {
+    const alumnos = todosAlumnos.filter(a => a.mentor_id === mentor.id);
+    const total   = alumnos.length;
+
+    const conPrimer  = alumnos.filter(a => !!a.fecha_primer).length;
+    const conSegundo = alumnos.filter(a =>
+      a.fecha_primer && a.fecha_ultimo && a.fecha_primer !== a.fecha_ultimo
+    ).length;
+    const conLlamada = alumnos.filter(a => {
+      const tipo = (a.tipo_contacto || '').toLowerCase();
+      return a.videollamada || tipo.includes('videollamada') || tipo.includes('llamada');
+    }).length;
+    const sinContacto = alumnos.filter(a => !a.fecha_primer).length;
+    const efectividad = total > 0 ? Math.round((conLlamada / total) * 100) : null;
+
+    return {
+      mentor,
+      total,
+      conPrimer,
+      conSegundo,
+      conLlamada,
+      sinContacto,
+      efectividad
+    };
+  });
+
+  // KPIs globales
+  const totalAlumnos  = todosAlumnos.length;
+  const sinMentor     = todosAlumnos.filter(a => !a.mentor_id).length;
+  const conAlumnos    = todosAlumnos.filter(a => !!a.mentor_id);
+  const gConPrimer    = conAlumnos.filter(a => !!a.fecha_primer).length;
+  const gConSegundo   = conAlumnos.filter(a =>
+    a.fecha_primer && a.fecha_ultimo && a.fecha_primer !== a.fecha_ultimo).length;
+  const gConLlamada   = conAlumnos.filter(a => {
+    const tipo = (a.tipo_contacto || '').toLowerCase();
+    return a.videollamada || tipo.includes('videollamada') || tipo.includes('llamada');
+  }).length;
+  const gSinContacto  = conAlumnos.filter(a => !a.fecha_primer).length;
+  const gEfectividad  = conAlumnos.length > 0
+    ? Math.round((gConLlamada / conAlumnos.length) * 100) : 0;
+
+  $('kpi-total-alumnos').textContent  = totalAlumnos;
+  $('kpi-contactados').textContent    = gConPrimer;
+  $('kpi-segundo').textContent        = gConSegundo;
+  $('kpi-llamada').textContent        = gConLlamada;
+  $('kpi-sin-contacto').textContent   = gSinContacto;
+  $('kpi-efectividad').textContent    = `${gEfectividad}%`;
+
+  renderEstadisticasMentores(metricasMentor);
+
+  // Listener del sort
+  $('stats-sort').value = statsSort;
+  $('stats-sort').onchange = (e) => {
+    statsSort = e.target.value;
+    renderEstadisticasMentores(metricasMentor);
+  };
+  $('btn-stats-refresh').onclick = () => loadEstadisticas();
+}
+
+function renderEstadisticasMentores(metricas) {
+  const list = $('stats-mentor-list');
+
+  // Ordenar
+  const sorted = metricas.slice().sort((a, b) => {
+    if (statsSort === 'efectividad') {
+      const ea = a.efectividad ?? -1;
+      const eb = b.efectividad ?? -1;
+      return eb - ea;
+    }
+    if (statsSort === 'alumnos')      return b.total - a.total;
+    if (statsSort === 'nombre')       return fullName(a.mentor).localeCompare(fullName(b.mentor));
+    if (statsSort === 'sin-contacto') return b.sinContacto - a.sinContacto;
+    return 0;
+  });
+
+  if (!sorted.length) {
+    list.innerHTML = '<div class="empty-state"><span>🌿</span><p>No hay mentores activos con alumnos.</p></div>';
+    return;
+  }
+
+  list.innerHTML = sorted.map(m => renderFilaMentor(m)).join('');
+}
+
+function renderFilaMentor({ mentor, total, conPrimer, conSegundo, conLlamada, sinContacto, efectividad }) {
+  const av = mentor.avatar_url
+    ? `<img class="user-row-avatar" src="${escapeHtml(mentor.avatar_url)}" alt="" style="width:40px;height:40px"/>`
+    : `<div class="user-row-avatar-placeholder" style="width:40px;height:40px">${escapeHtml(initials(mentor))}</div>`;
+
+  // Badge circular de efectividad
+  let badgeCls = 'efectividad-nula';
+  if (efectividad !== null) {
+    if (efectividad >= 60)      badgeCls = 'efectividad-alta';
+    else if (efectividad >= 30) badgeCls = 'efectividad-media';
+    else                         badgeCls = 'efectividad-baja';
+  }
+  const efectividadTxt = efectividad !== null ? `${efectividad}%` : '—';
+
+  // Porcentajes para las barras (sobre el total de alumnos asignados)
+  const pct = (n) => total > 0 ? Math.round((n / total) * 100) : 0;
+  const pPrimer   = pct(conPrimer);
+  const pSegundo  = pct(conSegundo);
+  const pLlamada  = pct(conLlamada);
+  const pSin      = pct(sinContacto);
+
+  return `
+    <div class="stats-mentor-row">
+      <!-- Info del mentor -->
+      <div class="stats-mentor-info">
+        ${av}
+        <div>
+          <div class="stats-mentor-name">${escapeHtml(fullName(mentor))}</div>
+          <div class="stats-mentor-sub">${total} alumno${total !== 1 ? 's' : ''} asignado${total !== 1 ? 's' : ''}</div>
+        </div>
+      </div>
+
+      <!-- Métricas + embudo -->
+      <div class="stats-mentor-right">
+        <!-- Números rápidos -->
+        <div class="stats-nums-row">
+          <div class="stats-num-item">
+            <span class="stats-num-val">${total}</span>
+            <span class="stats-num-label">Alumnos</span>
+          </div>
+          <div class="stats-num-item">
+            <span class="stats-num-val">${conPrimer}</span>
+            <span class="stats-num-label">1er ctcto</span>
+          </div>
+          <div class="stats-num-item">
+            <span class="stats-num-val">${conSegundo}</span>
+            <span class="stats-num-label">2do ctcto</span>
+          </div>
+          <div class="stats-num-item">
+            <span class="stats-num-val">${conLlamada}</span>
+            <span class="stats-num-label">Llamada</span>
+          </div>
+          <div class="stats-num-item">
+            <span class="stats-num-val ${sinContacto > 0 ? 'val-warn' : ''}">${sinContacto}</span>
+            <span class="stats-num-label">Sin ctcto</span>
+          </div>
+          <div class="stats-num-item">
+            <div class="efectividad-badge ${badgeCls}">${efectividadTxt}</div>
+            <span class="stats-num-label">Efect.</span>
+          </div>
+        </div>
+
+        <!-- Barras del embudo -->
+        <div class="stats-funnel">
+          <div class="stats-funnel-row">
+            <span class="stats-funnel-label">1er contacto</span>
+            <div class="stats-funnel-track">
+              <div class="stats-funnel-fill funnel-nivel-1" style="width:${pPrimer}%"></div>
+            </div>
+            <span class="stats-funnel-pct">${pPrimer}%</span>
+          </div>
+          <div class="stats-funnel-row">
+            <span class="stats-funnel-label">2do contacto</span>
+            <div class="stats-funnel-track">
+              <div class="stats-funnel-fill funnel-nivel-2" style="width:${pSegundo}%"></div>
+            </div>
+            <span class="stats-funnel-pct">${pSegundo}%</span>
+          </div>
+          <div class="stats-funnel-row">
+            <span class="stats-funnel-label">Llamada/Video</span>
+            <div class="stats-funnel-track">
+              <div class="stats-funnel-fill funnel-nivel-3" style="width:${pLlamada}%"></div>
+            </div>
+            <span class="stats-funnel-pct">${pLlamada}%</span>
+          </div>
+          ${sinContacto > 0 ? `
+          <div class="stats-funnel-row">
+            <span class="stats-funnel-label" style="color:#C4825A">Sin contacto</span>
+            <div class="stats-funnel-track">
+              <div class="stats-funnel-fill funnel-sin" style="width:${pSin}%"></div>
+            </div>
+            <span class="stats-funnel-pct" style="color:#C4825A">${pSin}%</span>
+          </div>` : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   SUPER ADMIN: toggle de permiso de estadísticas en userGroup
+═══════════════════════════════════════════════════════════════ */
+
+async function toggleEstadisticasPermiso(userId, puedeVer) {
+  const { error } = await db.rpc('admin_set_estadisticas', {
+    target_user: userId,
+    puede: puedeVer
+  });
+  if (error) {
+    console.error('admin_set_estadisticas:', error);
+    toast('Error: ' + error.message, 'error');
+    loadSuperUsuarios();
+    return;
+  }
+  toast(puedeVer ? 'Acceso a estadísticas activado ✓' : 'Acceso a estadísticas desactivado');
   loadSuperUsuarios();
 }
 
