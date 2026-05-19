@@ -3398,3 +3398,72 @@ input:checked + .switch-track-video { background: #3B82F6; }
   }
 }
 
+
+
+/* ═══════════════════════════════════════════════════════════════
+   HOLOS · Pantalla pausa/bloqueo + estados de mentor
+═══════════════════════════════════════════════════════════════ */
+
+/* Pantalla pausada */
+#paused-screen { display:none; }
+#paused-screen.active { display:flex; flex-direction:column; min-height:100dvh; background:var(--bg); }
+#blocked-screen { display:none; }
+#blocked-screen.active { display:flex; align-items:center; justify-content:center; min-height:100dvh; padding:24px; background:var(--bg); }
+
+.paused-layout { display:flex; flex-direction:column; height:100dvh; overflow:hidden; }
+.paused-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 20px;
+  background:var(--bg-card);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.paused-body { flex:1; overflow:hidden; display:flex; flex-direction:column; }
+.paused-banner {
+  display:flex; align-items:center; gap:14px;
+  padding:14px 20px;
+  background:#FDF3DC;
+  border-bottom:2px solid #E8C84A;
+  flex-shrink:0;
+}
+.paused-banner-icon { font-size:28px; flex-shrink:0; line-height:1; }
+.paused-banner-text h2 { font-family:var(--font-display); font-size:17px; color:#6B5200; margin-bottom:4px; }
+.paused-banner-text p  { font-size:13px; color:#8B6F00; line-height:1.4; }
+.paused-chat-wrap { flex:1; overflow:hidden; padding:16px; }
+.paused-chat-wrap .chat-layout { height:100%; max-height:none; }
+
+/* Estados en tarjetas de mentor */
+.mentor-card-top {
+  display:flex; align-items:flex-start; justify-content:center;
+  flex-direction:column; align-items:center;
+  gap:8px; width:100%; margin-bottom:6px;
+}
+.mentor-card-inactiva { opacity:.75; }
+.mentor-card-inactiva .mentor-avatar,
+.mentor-card-inactiva .mentor-avatar-placeholder { filter:grayscale(.6); }
+
+.mentor-estado-badge {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:10px; font-weight:700; padding:3px 8px;
+  border-radius:999px; text-transform:uppercase; letter-spacing:.4px;
+}
+.estado-activo   { background:var(--accent-light);  color:var(--accent-dark); }
+.estado-pausado  { background:#FDF3DC; color:#8B6F00; border:1px solid #E8C84A; }
+.estado-bloqueado { background:#FBEDEB; color:#8B3530; border:1px dashed #B85450; }
+
+/* Botones de pausa/bloqueo en tarjeta */
+.btn-estado-mentor {
+  flex:1; font-size:11px; padding:7px 6px;
+  border-radius:var(--radius-sm); cursor:pointer;
+  font-family:var(--font-body); font-weight:500;
+  border:1px solid var(--border); background:var(--bg-card);
+  color:var(--text-secondary); transition:var(--transition);
+}
+.btn-pausar:hover   { border-color:#E8C84A; color:#8B6F00; background:#FDF3DC; }
+.btn-bloquear:hover { border-color:#B85450; color:#8B3530; background:#FBEDEB; }
+.btn-reactivar      { background:var(--accent-light); color:var(--accent-dark); border-color:var(--accent); }
+.btn-reactivar:hover { background:var(--accent); color:white; }
+
+/* Tres botones en la tarjeta — hacerlos más chicos */
+.mentor-card-actions { gap:4px; }
+

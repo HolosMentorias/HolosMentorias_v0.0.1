@@ -150,6 +150,63 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════
+       PANTALLA "MENTOR BLOQUEADO"
+       Idéntica visualmente a "pendiente" — sin acceso a nada.
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="blocked-screen" class="screen">
+    <div class="pending-card">
+      <span class="pending-icon">🚫</span>
+      <h1>Acceso bloqueado</h1>
+      <p>Tu cuenta de mentor ha sido bloqueada temporalmente. Esperá a que un administrador te reasigne el acceso.</p>
+      <p class="pending-email" id="blocked-email">—</p>
+      <button class="btn-secondary" id="blocked-logout">Cerrar sesión</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       PANTALLA "MENTOR PAUSADO"
+       Acceso solo a Mensajes para contactar admins.
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="paused-screen" class="screen">
+    <div class="paused-layout">
+      <header class="paused-header">
+        <div class="header-brand">
+          <span class="brand-leaf">🌿</span>
+          <span class="brand-name">Holos<span class="brand-name-sub">Mentorías</span></span>
+        </div>
+        <button class="btn-secondary" id="paused-logout" style="font-size:12px;padding:6px 12px">Cerrar sesión</button>
+      </header>
+      <div class="paused-body">
+        <div class="paused-banner">
+          <div class="paused-banner-icon">⏸️</div>
+          <div class="paused-banner-text">
+            <h2>Tu cuenta está momentáneamente pausada</h2>
+            <p>Comunicate con administración para más información. Podés usar el chat mientras tanto.</p>
+          </div>
+        </div>
+        <div class="paused-chat-wrap">
+          <div class="chat-layout" data-chat-context="mentor" id="paused-chat-layout">
+            <aside class="chat-sidebar" id="paused-chat-sidebar">
+              <div class="chat-sidebar-header">
+                <h2 class="section-title" style="font-size:15px">Administradores</h2>
+              </div>
+              <div class="chat-sidebar-list" id="paused-chat-list">
+                <div class="loading-state"><div class="spinner"></div><p>Cargando...</p></div>
+              </div>
+            </aside>
+            <section class="chat-main" id="paused-chat-main">
+              <div class="chat-empty">
+                <span>💬</span>
+                <p>Seleccioná un administrador para enviar un mensaje.</p>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
        APP PRINCIPAL — Layout común (header + nav + main)
        El contenido del main cambia según rol y vista activa.
   ═══════════════════════════════════════════════════════════ -->

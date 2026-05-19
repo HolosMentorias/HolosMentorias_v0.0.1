@@ -412,6 +412,134 @@ $('btn-logout').onclick = async () => {
 $('pending-logout').onclick = () => $('btn-logout').click();
 $('pending-refresh').onclick = () => bootstrapSession();
 
+// Pantalla bloqueado
+$('blocked-logout').onclick = () => $('btn-logout').click();
+
+// Pantalla pausado
+$('paused-logout').onclick = () => $('btn-logout').click();
+
+/* Chat embebido en la pantalla de pausa
+   Reutiliza toda la lógica de chat existente pero apunta a los
+   contenedores de la pantalla paused en lugar de los de la app. */
+async function initPausedChat() {
+  // Cargar admins disponibles para contactar
+  const [peersRes, convRes] = await Promise.all([
+    db.from('profiles')
+      .select('id,email,nombre,apellido,avatar_url,rol')
+      .eq('activo', true)
+      .eq('rol', 'admin'),
+    db.from('conversations')
+      .select('id, admin_id, mentor_id, last_message_at')
+      .eq('is_broadcast', false)
+  ]);
+
+  chat.peers         = peersRes.data || [];
+  chat.conversations = convRes.data || [];
+
+  const sidebarList = $('paused-chat-list');
+  sidebarList.innerHTML = '';
+
+  if (!chat.peers.length) {
+    sidebarList.innerHTML = '<div class="empty-state" style="padding:20px"><p>No hay administradores disponibles.</p></div>';
+    return;
+  }
+
+  const convByPeerId = new Map();
+  chat.conversations.forEach(c => {
+    if (c.admin_id) convByPeerId.set(c.admin_id, c);
+  });
+
+  // Calcular no leídos iniciales
+  await refreshGlobalUnread('mentor');
+
+  chat.peers
+    .slice()
+    .sort((a, b) => fullName(a).localeCompare(fullName(b)))
+    .forEach(peer => {
+      const conv    = convByPeerId.get(peer.id) || null;
+      const unread  = conv ? (chat.unread[conv.id] || 0) : 0;
+      const av = peer.avatar_url
+        ? `<img class="chat-item-avatar" src="${escapeHtml(peer.avatar_url)}" alt=""/>`
+        : `<div class="chat-item-avatar-placeholder">${escapeHtml(initials(peer))}</div>`;
+      sidebarList.insertAdjacentHTML('beforeend', `
+        <div class="chat-item" data-peer-id="${peer.id}">
+          ${av}
+          <div class="chat-item-info">
+            <div class="chat-item-name">${escapeHtml(fullName(peer))}</div>
+            <div class="chat-item-preview">${conv?.last_message_at ? formatRelative(conv.last_message_at) : 'Sin mensajes'}</div>
+          </div>
+          ${unread > 0 ? `<span class="chat-item-unread">${unread}</span>` : ''}
+        </div>
+      `);
+    });
+
+  $$('.chat-item', sidebarList).forEach(el => {
+    el.onclick = async () => {
+      $$('.chat-item', sidebarList).forEach(i => i.classList.remove('active'));
+      el.classList.add('active');
+      await openConversationInPanel(el.dataset.peerId, 'paused-chat-main');
+    };
+  });
+
+  // Realtime para notificaciones mientras está en pausa
+  startGlobalNotifications('mentor');
+}
+
+/* Abre conversación en un panel específico (reutilizable para paused) */
+async function openConversationInPanel(peerId, panelId) {
+  const peer = chat.peers.find(p => p.id === peerId);
+  if (!peer) return;
+
+  const admin_id  = peer.id;
+  const mentor_id = state.profile.id;
+
+  const { data: convId, error } = await db.rpc('get_or_create_conversation', {
+    p_admin_id:  admin_id,
+    p_mentor_id: mentor_id
+  });
+  if (error) { toast('No se pudo abrir el chat: ' + error.message, 'error'); return; }
+
+  chat.active = { id: convId, peer };
+  if (!chat.conversations.find(c => c.id === convId)) {
+    chat.conversations.push({ id: convId, admin_id, mentor_id, last_message_at: null });
+  }
+
+  await loadMessages();
+
+  const panel = $(panelId);
+  const av = peer.avatar_url
+    ? `<img class="chat-header-avatar" src="${escapeHtml(peer.avatar_url)}" alt=""/>`
+    : `<div class="chat-header-avatar-placeholder">${escapeHtml(initials(peer))}</div>`;
+  panel.innerHTML = `
+    <div class="chat-header">
+      ${av}
+      <div class="chat-header-info">
+        <div class="chat-header-name">${escapeHtml(fullName(peer))}</div>
+        <div class="chat-header-sub">${escapeHtml(peer.email)}</div>
+      </div>
+    </div>
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="chat-composer">
+      <textarea id="chat-input" rows="1" placeholder="Escribí un mensaje..."></textarea>
+      <button id="chat-send" title="Enviar" aria-label="Enviar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  `;
+  renderMessages();
+
+  const ta = $('chat-input');
+  ta.addEventListener('input', () => {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+  });
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('chat-send').click(); }
+  });
+  ta.focus();
+  $('chat-send').onclick = () => sendMessage('mentor');
+}
+
 /* ───────────────────────────────────────────────────────────────
    6. BOOTSTRAP — al cargar y al loguearse
 ─────────────────────────────────────────────────────────────── */
@@ -428,7 +556,7 @@ async function bootstrapSession() {
   // Cargar perfil del usuario
   const { data: prof, error } = await db
     .from('profiles')
-    .select('id,email,rol,nombre,apellido,avatar_url,activo,puede_ver_estadisticas,mensaje_bienvenida')
+    .select('id,email,rol,nombre,apellido,avatar_url,activo,puede_ver_estadisticas,mensaje_bienvenida,estado_mentor')
     .eq('id', session.user.id)
     .single();
 
@@ -448,6 +576,20 @@ async function bootstrapSession() {
   if (!prof.rol) {
     $('pending-email').textContent = prof.email;
     showScreen('pending-screen');
+    return;
+  }
+
+  // Mentor bloqueado → pantalla idéntica a "pendiente"
+  if (prof.rol === 'mentor' && prof.estado_mentor === 'bloqueado') {
+    $('blocked-email').textContent = prof.email;
+    showScreen('blocked-screen');
+    return;
+  }
+
+  // Mentor pausado → pantalla con acceso solo a mensajes
+  if (prof.rol === 'mentor' && prof.estado_mentor === 'pausado') {
+    showScreen('paused-screen');
+    initPausedChat();
     return;
   }
 
@@ -1153,10 +1295,9 @@ $('btn-restaurar-alumno').onclick = async () => {
 ═══════════════════════════════════════════════════════════════ */
 
 async function loadAdminMentores() {
-  // Mentores + conteo de alumnos por mentor
   const [mRes, aRes] = await Promise.all([
     db.from('profiles')
-      .select('id,nombre,apellido,email,avatar_url,activo')
+      .select('id,nombre,apellido,email,avatar_url,activo,estado_mentor')
       .eq('rol','mentor')
       .order('created_at', { ascending: false }),
     db.from('alumnos').select('id, mentor_id, baja')
@@ -1165,7 +1306,6 @@ async function loadAdminMentores() {
   if (mRes.error) { toast('Error al cargar mentores','error'); return; }
   state.adminMentores = mRes.data || [];
 
-  // Calcular alumnos activos por mentor
   const counts = new Map();
   (aRes.data || []).forEach(a => {
     if (!a.mentor_id || a.baja) return;
@@ -1192,31 +1332,87 @@ function renderAdminMentores(counts) {
   }
 
   for (const m of list) {
-    const count = counts.get(m.id) || 0;
+    const count  = counts.get(m.id) || 0;
+    const estado = m.estado_mentor || 'activo';
     const avatarHtml = m.avatar_url
       ? `<img class="mentor-avatar" src="${escapeHtml(m.avatar_url)}" alt="" />`
       : `<div class="mentor-avatar-placeholder">${escapeHtml(initials(m))}</div>`;
+
+    // Badge de estado
+    const estadoBadge =
+      estado === 'pausado'
+        ? '<span class="mentor-estado-badge estado-pausado">⏸ Pausado</span>'
+        : estado === 'bloqueado'
+          ? '<span class="mentor-estado-badge estado-bloqueado">🚫 Bloqueado</span>'
+          : '<span class="mentor-estado-badge estado-activo">● Activo</span>';
+
+    // Botones de acción según estado actual
+    const btnPausa = estado === 'pausado'
+      ? `<button class="btn-estado-mentor btn-reactivar" data-mentor="${m.id}" data-nuevo="activo">Reactivar</button>`
+      : `<button class="btn-estado-mentor btn-pausar" data-mentor="${m.id}" data-nuevo="pausado">Pausar</button>`;
+    const btnBloqueo = estado === 'bloqueado'
+      ? `<button class="btn-estado-mentor btn-reactivar" data-mentor="${m.id}" data-nuevo="activo">Desbloquear</button>`
+      : `<button class="btn-estado-mentor btn-bloquear" data-mentor="${m.id}" data-nuevo="bloqueado">Bloquear</button>`;
+
     grid.insertAdjacentHTML('beforeend', `
-      <article class="mentor-card" data-id="${m.id}">
-        ${avatarHtml}
+      <article class="mentor-card ${estado !== 'activo' ? 'mentor-card-inactiva' : ''}" data-id="${m.id}">
+        <div class="mentor-card-top">
+          ${avatarHtml}
+          ${estadoBadge}
+        </div>
         <div class="mentor-card-name">${escapeHtml(fullName(m))}</div>
         <div class="mentor-card-email">${escapeHtml(m.email)}</div>
         <div class="mentor-card-stats">
           <div><strong>${count}</strong>alumnos</div>
         </div>
         <div class="mentor-card-actions">
-          <button class="btn-secondary btn-pdf-mentor" data-mentor="${m.id}">Informe PDF</button>
+          <button class="btn-secondary btn-pdf-mentor" data-mentor="${m.id}" style="flex:1">PDF</button>
+          ${btnPausa}
+          ${btnBloqueo}
         </div>
       </article>
     `);
   }
 
+  // Bindings
   $$('.btn-pdf-mentor', grid).forEach(btn => {
+    btn.onclick = (e) => { e.stopPropagation(); exportarInformeMentor(btn.dataset.mentor); };
+  });
+  $$('.btn-estado-mentor', grid).forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
-      exportarInformeMentor(btn.dataset.mentor);
+      cambiarEstadoMentor(btn.dataset.mentor, btn.dataset.nuevo);
     };
   });
+}
+
+async function cambiarEstadoMentor(mentorId, nuevoEstado) {
+  const mentor = state.adminMentores.find(m => m.id === mentorId);
+  const nombre = mentor ? fullName(mentor) : 'este mentor';
+
+  const mensajes = {
+    pausado:   `¿Pausar la cuenta de ${nombre}? El mentor verá un aviso y solo podrá acceder a mensajes.`,
+    bloqueado: `¿Bloquear a ${nombre}? El mentor no podrá acceder a nada, como si no tuviera rol asignado.`,
+    activo:    `¿Reactivar la cuenta de ${nombre}? Recuperará acceso completo.`
+  };
+  if (!confirm(mensajes[nuevoEstado] || '¿Confirmar?')) return;
+
+  const { error } = await db.rpc('admin_set_mentor_estado', {
+    target_user: mentorId,
+    nuevo_estado: nuevoEstado
+  });
+  if (error) {
+    console.error('admin_set_mentor_estado:', error);
+    toast('Error: ' + error.message, 'error');
+    return;
+  }
+  const toastMsg = {
+    pausado:   `${nombre} pausado ✓`,
+    bloqueado: `${nombre} bloqueado ✓`,
+    activo:    `${nombre} reactivado ✓`
+  };
+  toast(toastMsg[nuevoEstado] || 'Estado actualizado ✓');
+  loadAdminMentores();
 }
 
 $('adm-search-mentores').addEventListener('input', e => {
