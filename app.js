@@ -826,6 +826,8 @@ function renderAdminAlumnos() {
     const m = mentorMap.get(a.mentor_id);
     const mentorTxt = m ? fullName(m) : 'Sin asignar';
     const eliminado = !!a.eliminado;
+    const dias = a.fecha_ultimo ? diffDays(a.fecha_ultimo) : null;
+    const alerta = dias !== null && dias > 14 && !eliminado && !a.baja;
     const tag = eliminado
       ? '<span class="alumno-card-tag tag-eliminado">eliminado</span>'
       : a.baja
@@ -834,11 +836,15 @@ function renderAdminAlumnos() {
             ? '<span class="alumno-card-tag tag-asignado">asignado</span>'
             : '<span class="alumno-card-tag tag-sin">sin mentor</span>');
     const elimClass = eliminado ? 'is-eliminado' : '';
+    const nivel = getNivelLabel(a);
 
     if (state.adminAlumnoViewMode === 'list') {
       grid.insertAdjacentHTML('beforeend', `
         <article class="alumno-card admin-alumno-card ${elimClass}" data-id="${a.id}">
-          <div class="alumno-card-name">${escapeHtml(a.apellido)}, ${escapeHtml(a.nombre)}</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div class="crecimiento-icon-mini">${getIconoCrecimiento(a)}</div>
+            <div class="alumno-card-name">${escapeHtml(a.apellido)}, ${escapeHtml(a.nombre)}</div>
+          </div>
           <div class="alumno-card-meta list-col-mentor">${escapeHtml(mentorTxt)}</div>
           <div class="alumno-card-meta list-col-fecha">${a.telefono ? '📞 ' + escapeHtml(a.telefono) : ''}</div>
           ${tag}
@@ -847,15 +853,22 @@ function renderAdminAlumnos() {
     } else {
       grid.insertAdjacentHTML('beforeend', `
         <article class="alumno-card admin-alumno-card ${elimClass}" data-id="${a.id}">
-          <div class="alumno-card-head">
-            <span class="alumno-card-name">${escapeHtml(a.nombre)} ${escapeHtml(a.apellido)}</span>
-            ${tag}
+          ${alerta ? `<div class="card-alerta-banner">⚠️ Sin contacto hace ${dias} día${dias === 1 ? '' : 's'}</div>` : ''}
+          <div class="card-top-row">
+            <div class="card-top-info">
+              <div class="alumno-card-name">${escapeHtml(a.nombre)} ${escapeHtml(a.apellido)}</div>
+              <div class="card-telefono">Mentor: <strong>${escapeHtml(mentorTxt)}</strong></div>
+              <div class="card-nivel-label ${nivel.cls}">${nivel.label}</div>
+            </div>
+            <div class="card-top-right">
+              ${getIconoCrecimiento(a)}
+              ${tag}
+            </div>
           </div>
           <div class="alumno-card-meta">
-            Mentor: <strong>${escapeHtml(mentorTxt)}</strong>
-            ${a.telefono ? '<br/>📞 ' + escapeHtml(a.telefono) : ''}
-            <br/>Creado: <strong>${formatDate(a.created_at?.slice(0,10))}</strong>
-            ${eliminado && a.eliminado_at ? '<br/><span style="color:#B85450">Eliminado: ' + formatDate(a.eliminado_at.slice(0,10)) + '</span>' : ''}
+            ${a.telefono ? '📞 ' + escapeHtml(a.telefono) + ' · ' : ''}
+            Creado: <strong>${formatDate(a.created_at?.slice(0,10))}</strong>
+            ${eliminado && a.eliminado_at ? ' · <span style="color:#B85450">Eliminado: ' + formatDate(a.eliminado_at.slice(0,10)) + '</span>' : ''}
           </div>
         </article>
       `);
