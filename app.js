@@ -828,15 +828,17 @@ function renderAdminAlumnos() {
     const eliminado = !!a.eliminado;
     const dias = a.fecha_ultimo ? diffDays(a.fecha_ultimo) : null;
     const alerta = dias !== null && dias > 14 && !eliminado && !a.baja;
-    const tag = eliminado
+    const elimClass = eliminado ? 'is-eliminado' : '';
+    const nivel = getNivelLabel(a);
+
+    // Badge de estado — idéntico al mentor
+    const badgeEstado = eliminado
       ? '<span class="alumno-card-tag tag-eliminado">eliminado</span>'
       : a.baja
         ? '<span class="alumno-card-tag tag-baja">baja</span>'
-        : (a.mentor_id
-            ? '<span class="alumno-card-tag tag-asignado">asignado</span>'
-            : '<span class="alumno-card-tag tag-sin">sin mentor</span>');
-    const elimClass = eliminado ? 'is-eliminado' : '';
-    const nivel = getNivelLabel(a);
+        : a.activa
+          ? '<span class="card-badge-activa activa-si"><svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg> Activa</span>'
+          : '<span class="card-badge-activa activa-no"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg> Inactiva</span>';
 
     if (state.adminAlumnoViewMode === 'list') {
       grid.insertAdjacentHTML('beforeend', `
@@ -847,7 +849,7 @@ function renderAdminAlumnos() {
           </div>
           <div class="alumno-card-meta list-col-mentor">${escapeHtml(mentorTxt)}</div>
           <div class="alumno-card-meta list-col-fecha">${a.telefono ? '📞 ' + escapeHtml(a.telefono) : ''}</div>
-          ${tag}
+          ${badgeEstado}
         </article>
       `);
     } else {
@@ -857,19 +859,22 @@ function renderAdminAlumnos() {
           <div class="card-top-row">
             <div class="card-top-info">
               <div class="alumno-card-name">${escapeHtml(a.nombre)} ${escapeHtml(a.apellido)}</div>
-              <div class="card-telefono">Mentor: <strong>${escapeHtml(mentorTxt)}</strong></div>
+              ${a.telefono ? `<div class="card-telefono">📞 ${escapeHtml(a.telefono)}</div>` : ''}
               <div class="card-nivel-label ${nivel.cls}">${nivel.label}</div>
             </div>
             <div class="card-top-right">
               ${getIconoCrecimiento(a)}
-              ${tag}
+              ${badgeEstado}
             </div>
           </div>
           <div class="alumno-card-meta">
-            ${a.telefono ? '📞 ' + escapeHtml(a.telefono) + ' · ' : ''}
-            Creado: <strong>${formatDate(a.created_at?.slice(0,10))}</strong>
-            ${eliminado && a.eliminado_at ? ' · <span style="color:#B85450">Eliminado: ' + formatDate(a.eliminado_at.slice(0,10)) + '</span>' : ''}
+            <span class="card-meta-item">👤 ${escapeHtml(mentorTxt)}</span>
+            ${a.tipo_contacto ? `<span class="card-meta-item">📞 ${escapeHtml(a.tipo_contacto)}</span>` : ''}
+            ${a.respondio ? `<span class="card-meta-item">✓ Respondió: <strong>${escapeHtml(a.respondio)}</strong></span>` : ''}
+            ${a.fecha_ultimo ? `<span class="card-meta-item">📅 ${formatDate(a.fecha_ultimo)}</span>` : ''}
           </div>
+          ${eliminado && a.eliminado_at ? `<div class="alumno-removed-banner">Eliminado el ${formatDate(a.eliminado_at.slice(0,10))}</div>` : ''}
+          ${eliminado && !a.eliminado_at ? '<div class="alumno-removed-banner">Este alumno fue eliminado</div>' : ''}
         </article>
       `);
     }
