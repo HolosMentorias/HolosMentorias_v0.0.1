@@ -238,6 +238,10 @@
             <button class="chip chip-baja" data-filter="baja">Bajas</button>
           </div>
           <div class="controls-actions">
+            <button class="btn-config-msg" id="btn-config-mensaje">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Mensaje de bienvenida
+            </button>
             <button class="btn-export" id="btn-export-pdf" title="Exportar informe PDF">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
               <span>PDF</span>
@@ -640,6 +644,58 @@
         <div style="flex:1"></div>
         <button class="btn-secondary" id="btn-cancel">Cancelar</button>
         <button class="btn-primary" id="btn-save">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       MODAL · Detalle del alumno (vista mentor)
+       Calendario de contactos + WhatsApp + datos completos
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay hidden" id="modal-detail">
+    <div class="modal-card modal-card-detail">
+      <div class="modal-header">
+        <h2 id="detail-nombre">—</h2>
+        <button class="btn-icon" id="detail-close" aria-label="Cerrar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="detail-body"></div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="detail-btn-close">Cerrar</button>
+        <button class="btn-primary" id="detail-btn-edit">Editar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       MODAL · Configurar mensaje de bienvenida (mentor)
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay hidden" id="modal-config-msg">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>✏️ Mensaje de bienvenida</h2>
+        <button class="btn-icon" id="config-msg-close" aria-label="Cerrar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="hint" style="margin-bottom:12px">
+          Este mensaje se usa en <strong>todas las tarjetas</strong> al enviar por WhatsApp.
+          Editalo acá y se aplica a todos los contactos nuevos y existentes.
+        </p>
+        <div class="form-group">
+          <textarea id="config-msg-texto" rows="10" style="font-size:13px;line-height:1.5"></textarea>
+        </div>
+        <button class="link-btn" id="config-msg-reset" style="font-size:12px;color:var(--text-secondary)">
+          ↩ Restaurar texto original
+        </button>
+        <p id="config-msg-error" class="error-msg hidden"></p>
+        <p id="config-msg-ok" class="ok-msg hidden"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="config-msg-cancel">Cancelar</button>
+        <button class="btn-primary" id="config-msg-save">Guardar mensaje</button>
       </div>
     </div>
   </div>

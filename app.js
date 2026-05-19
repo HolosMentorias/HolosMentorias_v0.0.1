@@ -52,6 +52,24 @@ const state = {
 
 const PAGE_SIZE = 50;          // alumnos por página
 
+// Genera el mensaje de bienvenida con el nombre del mentor insertado.
+// Si el mentor ya tiene uno guardado, lo usa; si no, genera uno default.
+function getMensajeBienvenida(profile, alumno) {
+  const nombreMentor = fullName(profile) || 'tu mentor/a';
+  const base = profile.mensaje_bienvenida ||
+    `¡Hola! 👋 Mi nombre es ${nombreMentor}, soy Counselor egresada de Holos Capital Counseling.\nMe pongo en contacto porque en esta etapa voy a acompañarte como tu mentora. 🌱\nLa mentoría es un espacio pensado para vos: para compartir dudas, orientarte en el camino y acompañarte desde la experiencia de haber transitado este mismo recorrido.\nEstoy disponible para lo que necesites, ya sea consultas académicas, orientación sobre la carrera o simplemente charlar sobre el proceso. No dudes en escribirme cuando quieras.\n¡Bienvenido/a a esta etapa! Estoy muy contenta de acompañarte. 😊\n${nombreMentor}\nCounselor — Holos Capital Counseling`;
+  return base;
+}
+
+function formatPhone(tel) {
+  if (!tel) return '';
+  return tel.replace(/\D/g, '');
+}
+
+function encodeForWhatsApp(msg) {
+  return encodeURIComponent(msg);
+}
+
 /* ───────────────────────────────────────────────────────────────
    3. UTILS GENERALES
 ─────────────────────────────────────────────────────────────── */
@@ -240,23 +258,49 @@ $('btn-registro').onclick = async () => {
   if (pass !== pass2)             { err.textContent = 'Las contraseñas no coinciden.'; err.classList.remove('hidden'); return; }
 
   const btn = $('btn-registro'); btn.disabled = true; btn.textContent = 'Creando...';
-  // Los datos extra se pasan en options.data → quedan en auth.users.raw_user_meta_data
-  // y el trigger handle_new_user() los lee para insertarlos en profiles.
-  const { error } = await db.auth.signUp({
+  const { data: signUpData, error } = await db.auth.signUp({
     email, password: pass,
     options: { data: { nombre, apellido } }
   });
   btn.disabled = false; btn.textContent = 'Crear cuenta';
 
+  // Loguear siempre para diagnosticar
+  console.log('[signUp] data:', signUpData, '| error:', error);
+
   if (error) {
-    err.textContent = error.message.includes('already')
-      ? 'Ese email ya tiene cuenta. Iniciá sesión.'
-      : 'Error al crear la cuenta.';
+    let msg = 'Error al crear la cuenta.';
+    if (error.message.includes('already registered') || error.message.includes('already'))
+      msg = 'Ese email ya tiene cuenta. Iniciá sesión.';
+    else if (error.message.includes('Password should'))
+      msg = 'La contraseña debe tener al menos 8 caracteres.';
+    else if (error.message.includes('valid email'))
+      msg = 'El email no es válido.';
+    else if (error.message.includes('rate limit') || error.message.includes('email rate'))
+      msg = 'Demasiados intentos. Esperá unos minutos y volvé a intentar.';
+    else
+      msg = error.message; // mostrar el error real para debug
+    err.textContent = msg; err.classList.remove('hidden'); return;
+  }
+
+  // signUpData.user puede existir incluso sin error
+  if (signUpData?.user?.identities?.length === 0) {
+    // Usuario ya existía (Supabase a veces no lanza error en este caso)
+    err.textContent = 'Ese email ya tiene cuenta. Iniciá sesión.';
     err.classList.remove('hidden'); return;
   }
-  ok.textContent = '✓ Cuenta creada. Revisá tu email para confirmar. Después de iniciar sesión, un administrador te asignará un rol.';
+
+  ok.textContent = '✓ Cuenta creada correctamente. Redirigiendo...';
   ok.classList.remove('hidden');
   ['reg-nombre','reg-apellido','reg-email','reg-password','reg-password2'].forEach(id => $(id).value = '');
+
+  // Redirigir al login después de 1.5 segundos
+  setTimeout(() => {
+    ok.classList.add('hidden');
+    showLoginPanel('panel-login');
+    // Pre-cargar el email para que no lo tenga que tipear de nuevo
+    $('login-email').value = email;
+    $('login-password').focus();
+  }, 1500);
 };
 
 $('btn-reset').onclick = async () => {
@@ -477,7 +521,7 @@ function renderMentorAlumnos() {
         : renderMentorCard(a));
   }
   $$('.alumno-mentor-card', grid).forEach(card => {
-    card.onclick = () => openAlumnoForm(card.dataset.id);
+    card.onclick = () => openDetail(card.dataset.id);
   });
 }
 
@@ -1909,6 +1953,224 @@ $('profile-save').onclick = async () => {
   } finally {
     btn.disabled = false; btn.textContent = 'Guardar';
   }
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   MODAL DETALLE ALUMNO (mentor) — Calendario + WhatsApp
+═══════════════════════════════════════════════════════════════ */
+
+function buildMiniCalendario(a) {
+  const hoy   = new Date();
+  const año   = hoy.getFullYear();
+  const mes   = hoy.getMonth();
+  const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const DIAS  = ['Do','Lu','Ma','Mi','Ju','Vi','Sa'];
+
+  // Fechas con contacto registrado
+  const fechasContacto = new Set();
+  const addFecha = (d) => {
+    if (!d) return;
+    const f = new Date(d + 'T12:00:00');
+    if (f.getFullYear() === año && f.getMonth() === mes) fechasContacto.add(f.getDate());
+  };
+  addFecha(a.fecha_primer);
+  addFecha(a.fecha_ultimo);
+  // Entradas del seguimiento [dd/mm/yyyy ...]
+  const regex = /\[(\d{2})\/(\d{2})\/(\d{4})/g;
+  let match;
+  while ((match = regex.exec(a.seguimiento || '')) !== null) {
+    const d = +match[1], mo = +match[2]-1, y = +match[3];
+    if (y === año && mo === mes) fechasContacto.add(d);
+  }
+
+  // Próximo contacto sugerido (7 días después del último)
+  let proximoContacto = null;
+  const refFecha = a.fecha_ultimo || a.fecha_primer;
+  if (refFecha) {
+    const prox = new Date(refFecha + 'T12:00:00');
+    prox.setDate(prox.getDate() + 7);
+    if (prox.getFullYear() === año && prox.getMonth() === mes && prox > hoy)
+      proximoContacto = prox.getDate();
+  }
+
+  const primerDia = new Date(año, mes, 1).getDay();
+  const totalDias = new Date(año, mes+1, 0).getDate();
+
+  let celdas = '';
+  for (let i = 0; i < primerDia; i++) celdas += `<div class="cal-cell empty"></div>`;
+  for (let d = 1; d <= totalDias; d++) {
+    let cls = 'cal-cell';
+    if (d === hoy.getDate()) cls += ' cal-hoy';
+    if (fechasContacto.has(d)) cls += ' cal-contacto';
+    if (d === proximoContacto) cls += ' cal-proximo';
+    const title = fechasContacto.has(d) ? 'Contacto realizado' : d === proximoContacto ? 'Próximo contacto sugerido' : '';
+    celdas += `<div class="${cls}" title="${escapeHtml(title)}">${d}</div>`;
+  }
+
+  return `
+    <div class="mini-calendario">
+      <div class="cal-header"><span class="cal-mes">${MESES[mes]} ${año}</span></div>
+      <div class="cal-grid-header">${DIAS.map(d => `<div class="cal-day-name">${d}</div>`).join('')}</div>
+      <div class="cal-grid">${celdas}</div>
+      <div class="cal-leyenda">
+        <span class="cal-ley-item"><span class="cal-dot cal-dot-contacto"></span>Contacto</span>
+        <span class="cal-ley-item"><span class="cal-dot cal-dot-proximo"></span>Próximo sugerido</span>
+        <span class="cal-ley-item"><span class="cal-dot cal-dot-hoy"></span>Hoy</span>
+      </div>
+      ${proximoContacto ? `<p class="cal-sugerencia">💬 Próximo contacto sugerido: día ${proximoContacto}</p>` : ''}
+    </div>`;
+}
+
+function openDetail(alumnoId) {
+  const a = state.mentorAlumnos.find(x => String(x.id) === String(alumnoId));
+  if (!a) { toast('No se encontró el alumno','error'); return; }
+
+  $('detail-nombre').textContent = `${a.nombre} ${a.apellido}`;
+  const val = (v) => v ? `<span>${escapeHtml(v)}</span>` : `<span class="empty-val">—</span>`;
+  const mensaje = getMensajeBienvenida(state.profile, a);
+  const telefono = formatPhone(a.telefono);
+
+  $('detail-body').innerHTML = `
+    <!-- Mini Calendario -->
+    <div class="detail-section">
+      <div class="detail-section-title">Calendario de contactos</div>
+      ${buildMiniCalendario(a)}
+    </div>
+
+    <!-- Mensaje de bienvenida + WhatsApp -->
+    <div class="detail-section">
+      <div class="detail-section-title-row">
+        <span class="detail-section-title" style="margin-bottom:0">Mensaje de primer contacto</span>
+        <button class="btn-copy-msg" id="btn-copy-msg">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copiar
+        </button>
+      </div>
+      <div class="detail-text-block" id="detail-msg-text" style="margin-top:10px">${escapeHtml(mensaje)}</div>
+      ${telefono
+        ? `<button class="btn-whatsapp" id="btn-whatsapp" data-phone="${escapeHtml(telefono)}" data-msg="${escapeHtml(mensaje)}">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
+              Enviar por WhatsApp
+            </button>`
+        : `<div class="btn-whatsapp-disabled">Sin número de teléfono cargado</div>`}
+    </div>
+
+    <!-- Datos de contacto -->
+    <div class="detail-section">
+      <div class="detail-section-title">Contacto</div>
+      <div class="detail-row">
+        <div class="detail-item"><label>Teléfono</label>${val(a.telefono)}</div>
+        <div class="detail-item"><label>Respondió</label>${val(a.respondio)}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-item"><label>Primer contacto</label>${val(formatDate(a.fecha_primer))}</div>
+        <div class="detail-item"><label>Último contacto</label>${val(formatDate(a.fecha_ultimo))}</div>
+      </div>
+      <div class="detail-item"><label>Tipo de contacto</label>${val(a.tipo_contacto)}</div>
+    </div>
+
+    <!-- Inquietudes -->
+    <div class="detail-section">
+      <div class="detail-section-title">Inquietudes del estudiante</div>
+      ${a.inquietudes?.trim()
+        ? `<div class="detail-text-block">${escapeHtml(a.inquietudes.trim())}</div>`
+        : `<span class="empty-val">Sin registrar</span>`}
+    </div>
+
+    <!-- Seguimiento -->
+    <div class="detail-section">
+      <div class="detail-section-title">Seguimiento</div>
+      ${a.seguimiento?.trim()
+        ? `<div class="detail-text-block">${escapeHtml(a.seguimiento.trim())}</div>`
+        : `<span class="empty-val">Sin registrar</span>`}
+    </div>
+  `;
+
+  $('modal-detail').classList.remove('hidden');
+
+  // Copiar mensaje
+  $('btn-copy-msg').onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(mensaje);
+      const btn = $('btn-copy-msg');
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> ¡Copiado!`;
+      btn.style.borderColor = 'var(--accent)'; btn.style.color = 'var(--accent-dark)';
+      setTimeout(() => {
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copiar`;
+        btn.style.borderColor = ''; btn.style.color = '';
+      }, 2000);
+    } catch { toast('No se pudo copiar','error'); }
+  };
+
+  // WhatsApp
+  const btnWA = $('btn-whatsapp');
+  if (btnWA) {
+    btnWA.onclick = () => {
+      const url = `https://wa.me/${btnWA.dataset.phone}?text=${encodeForWhatsApp(btnWA.dataset.msg)}`;
+      window.open(url, '_blank', 'noopener');
+    };
+  }
+
+  // Botón editar del footer
+  $('detail-btn-edit').onclick = () => {
+    $('modal-detail').classList.add('hidden');
+    openAlumnoForm(alumnoId);
+  };
+}
+
+$('detail-close').onclick    = () => $('modal-detail').classList.add('hidden');
+$('detail-btn-close').onclick = () => $('modal-detail').classList.add('hidden');
+$('modal-detail').onclick = (e) => { if (e.target === $('modal-detail')) $('modal-detail').classList.add('hidden'); };
+
+/* ═══════════════════════════════════════════════════════════════
+   MODAL CONFIGURAR MENSAJE DE BIENVENIDA (mentor)
+═══════════════════════════════════════════════════════════════ */
+
+function getMensajeDefault() {
+  const nombre = fullName(state.profile) || 'tu mentor/a';
+  return `¡Hola! 👋 Mi nombre es ${nombre}, soy Counselor egresada de Holos Capital Counseling.\nMe pongo en contacto porque en esta etapa voy a acompañarte como tu mentora. 🌱\nLa mentoría es un espacio pensado para vos: para compartir dudas, orientarte en el camino y acompañarte desde la experiencia de haber transitado este mismo recorrido.\nEstoy disponible para lo que necesites, ya sea consultas académicas, orientación sobre la carrera o simplemente charlar sobre el proceso. No dudes en escribirme cuando quieras.\n¡Bienvenido/a a esta etapa! Estoy muy contenta de acompañarte. 😊\n${nombre}\nCounselor — Holos Capital Counseling`;
+}
+
+$('btn-config-mensaje').onclick = () => {
+  $('config-msg-texto').value = state.profile.mensaje_bienvenida || getMensajeDefault();
+  $('config-msg-error').classList.add('hidden');
+  $('config-msg-ok').classList.add('hidden');
+  $('modal-config-msg').classList.remove('hidden');
+};
+
+$('config-msg-close').onclick  = () => $('modal-config-msg').classList.add('hidden');
+$('config-msg-cancel').onclick = () => $('modal-config-msg').classList.add('hidden');
+$('config-msg-reset').onclick  = () => { $('config-msg-texto').value = getMensajeDefault(); };
+
+$('config-msg-save').onclick = async () => {
+  const texto = $('config-msg-texto').value.trim();
+  $('config-msg-error').classList.add('hidden');
+  $('config-msg-ok').classList.add('hidden');
+
+  if (!texto) {
+    $('config-msg-error').textContent = 'El mensaje no puede estar vacío.';
+    $('config-msg-error').classList.remove('hidden'); return;
+  }
+
+  const btn = $('config-msg-save');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  const { error } = await db.from('profiles')
+    .update({ mensaje_bienvenida: texto })
+    .eq('id', state.profile.id);
+
+  btn.disabled = false; btn.textContent = 'Guardar mensaje';
+
+  if (error) {
+    $('config-msg-error').textContent = 'Error: ' + error.message;
+    $('config-msg-error').classList.remove('hidden'); return;
+  }
+
+  state.profile.mensaje_bienvenida = texto;
+  $('config-msg-ok').textContent = '✓ Mensaje actualizado para todos tus alumnos.';
+  $('config-msg-ok').classList.remove('hidden');
+  setTimeout(() => $('modal-config-msg').classList.add('hidden'), 1500);
+  toast('Mensaje de bienvenida actualizado ✓');
 };
 
 /* ═══════════════════════════════════════════════════════════════
