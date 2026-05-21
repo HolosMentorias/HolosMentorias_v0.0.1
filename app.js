@@ -637,23 +637,67 @@ function configureNavForRole(rol) {
       (rol === 'admin' && reqRole === 'admin') ||
       (rol === 'mentor' && reqRole === 'mentor');
 
-    // La pestaña de estadísticas sólo se muestra si el admin tiene el permiso.
-    // El super_admin siempre la ve.
     if (tab.dataset.view === 'admin-estadisticas') {
       visible = (rol === 'super_admin') ||
                 (rol === 'admin' && !!state.profile.puede_ver_estadisticas);
     }
-
     tab.classList.toggle('visible', visible);
   });
 
   $$('.nav-tab').forEach(tab => {
     tab.onclick = () => switchView(tab.dataset.view);
   });
+
+  // Poblar el drawer mobile con los mismos tabs visibles
+  buildMobileDrawer();
+
+  // Hamburguesa
+  $('nav-hamburger').onclick = () => openMobileDrawer();
+  $('nav-drawer-close').onclick = () => closeMobileDrawer();
+  $('nav-mobile-overlay').onclick = () => closeMobileDrawer();
+}
+
+function buildMobileDrawer() {
+  const links = $('nav-mobile-links');
+  links.innerHTML = '';
+  $$('.nav-tab.visible').forEach(tab => {
+    const btn = document.createElement('button');
+    btn.className = 'nav-mobile-link' + (tab.classList.contains('active') ? ' active' : '');
+    btn.dataset.view = tab.dataset.view;
+    btn.innerHTML = tab.innerHTML;
+    btn.onclick = () => {
+      switchView(tab.dataset.view);
+      closeMobileDrawer();
+    };
+    links.appendChild(btn);
+  });
+}
+
+function openMobileDrawer() {
+  $('nav-mobile-overlay').classList.remove('hidden');
+  $('nav-mobile-drawer').classList.remove('hidden');
+  buildMobileDrawer(); // refrescar estados activos
+}
+
+function closeMobileDrawer() {
+  $('nav-mobile-overlay').classList.add('hidden');
+  $('nav-mobile-drawer').classList.add('hidden');
+}
+
+// Actualizar el label activo en la nav mobile
+function updateNavActiveLabel(viewId) {
+  const tab = document.querySelector(`.nav-tab[data-view="${viewId}"]`);
+  let label = $('nav-active-label');
+  if (!label) {
+    label = document.createElement('span');
+    label.id = 'nav-active-label';
+    label.className = 'nav-active-label';
+    $('nav-hamburger').insertAdjacentElement('afterend', label);
+  }
+  label.textContent = tab ? tab.textContent.trim().replace(/\d+$/, '').trim() : '';
 }
 
 function switchView(viewId) {
-  // Desuscribir realtime si nos vamos de una vista de chat
   if (state.currentView && state.currentView.endsWith('-mensajes') && viewId !== state.currentView) {
     unsubscribeRealtime();
     chat.active = null;
@@ -665,6 +709,13 @@ function switchView(viewId) {
   const pane = document.querySelector(`[data-view-pane="${viewId}"]`);
   if (!pane) return;
   pane.classList.remove('hidden');
+
+  // Actualizar label y drawer mobile
+  updateNavActiveLabel(viewId);
+  // Refrescar estado activo en el drawer sin abrirlo
+  $$('.nav-mobile-link').forEach(l => {
+    l.classList.toggle('active', l.dataset.view === viewId);
+  });
 
   // Cargar datos de la vista
   if (viewId === 'mentor-alumnos')   loadMentorAlumnos();
@@ -3094,10 +3145,13 @@ $('btn-nueva-pass').onclick = async () => {
 
   if (error) {
     console.error('updateUser:', error);
-    if (error.message.includes('same password')) {
-      err.textContent = 'La nueva contraseña no puede ser igual a la anterior.';
+    const msg = error.message;
+    if (msg.includes('same password') || msg.includes('different from the old password')) {
+      err.textContent = 'La nueva contraseña no puede ser igual a la anterior. Elegí una diferente.';
+    } else if (msg.includes('weak') || msg.includes('too short')) {
+      err.textContent = 'La contraseña es demasiado débil. Usá al menos 8 caracteres.';
     } else {
-      err.textContent = 'Error al actualizar: ' + error.message;
+      err.textContent = 'Error al actualizar la contraseña. Intentá nuevamente.';
     }
     err.classList.remove('hidden'); return;
   }

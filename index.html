@@ -267,6 +267,10 @@
 
       <!-- NAV de pestañas — visible según rol -->
       <nav class="app-nav" id="app-nav">
+        <!-- Botón hamburguesa (solo mobile) -->
+        <button class="nav-hamburger" id="nav-hamburger" aria-label="Menú">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
         <!-- Mentor -->
         <button class="nav-tab" data-view="mentor-alumnos" data-role="mentor">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -912,6 +916,21 @@
         <input type="text" id="pick-mentor-search" placeholder="Buscar mentor..." class="pick-search" />
         <div class="pick-list" id="pick-mentor-list"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- Overlay menú mobile -->
+  <div class="nav-mobile-overlay hidden" id="nav-mobile-overlay"></div>
+  <div class="nav-mobile-drawer hidden" id="nav-mobile-drawer">
+    <div class="nav-mobile-header">
+      <span class="brand-leaf">🌿</span>
+      <span style="font-family:var(--font-display);font-size:18px">Holos <em style="font-style:italic;color:var(--accent)">Mentorías</em></span>
+      <button class="btn-icon" id="nav-drawer-close" aria-label="Cerrar">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="nav-mobile-links" id="nav-mobile-links">
+      <!-- Se puebla dinámicamente desde JS igual que app-nav -->
     </div>
   </div>
 
