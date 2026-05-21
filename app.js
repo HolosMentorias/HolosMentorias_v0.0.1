@@ -3011,52 +3011,55 @@ $('config-msg-save').onclick = async () => {
    15. BOOT
 ═══════════════════════════════════════════════════════════════ */
 
-// ── Detectar si venimos de un link de recovery ANTES de todo ──
+// ── Detectar recovery en el hash ANTES del boot ──────────────
 // Supabase pone el token en el hash: #access_token=...&type=recovery
-// Si lo detectamos acá, mostramos el panel de nueva contraseña
-// directamente sin pasar por bootstrapSession.
-(function checkRecoveryOnLoad() {
-  const hash = window.location.hash;
-  if (!hash) return;
-  const params = new URLSearchParams(hash.slice(1)); // quitar el #
-  if (params.get('type') === 'recovery') {
-    // Limpiar el hash de la URL para que no quede visible
-    window.history.replaceState(null, '', window.location.pathname);
-    // Mostrar el panel de nueva contraseña inmediatamente
-    showScreen('login-screen');
-    showLoginPanel('panel-nueva-pass');
-    $('nueva-pass-1').focus();
-    // Marcar que estamos en modo recovery para que bootstrapSession no arranque
-    window.__HOLOS_RECOVERY__ = true;
-  }
-})();
+// Si lo detectamos, NO arrancamos bootstrapSession todavía —
+// esperamos a que onAuthStateChange dispare PASSWORD_RECOVERY
+// con la sesión ya establecida por Supabase.
+const _hashParams  = new URLSearchParams(window.location.hash.slice(1));
+const _isRecovery  = _hashParams.get('type') === 'recovery';
 
-if (!window.__HOLOS_RECOVERY__) {
+if (_isRecovery) {
+  // Mostrar pantalla de login vacía mientras Supabase procesa el token
+  // (onAuthStateChange con PASSWORD_RECOVERY la va a completar en ~300ms)
+  showScreen('login-screen');
+  showLoginPanel('panel-login'); // panel base por si tarda
+} else {
   bootstrapSession();
 }
 
 // ── Reaccionar a cambios de sesión ─────────────────────────────
 db.auth.onAuthStateChange((event, session) => {
   if (event === 'PASSWORD_RECOVERY') {
-    // Token de recovery detectado vía evento (segundo mecanismo de seguridad).
-    // Si ya mostramos el panel desde checkRecoveryOnLoad, no hacer nada.
-    // Si no (ej: el hash ya fue consumido por Supabase antes de que lo leyéramos),
-    // lo mostramos ahora.
+    // Supabase ya procesó el token y la sesión está activa.
+    // Ahora sí es seguro llamar a updateUser().
     window.__HOLOS_RECOVERY__ = true;
+    // Limpiar el hash de la URL
+    window.history.replaceState(null, '', window.location.pathname);
     showScreen('login-screen');
     showLoginPanel('panel-nueva-pass');
     $('nueva-pass-1').focus();
     return;
   }
+
+  if (event === 'SIGNED_IN' && !window.__HOLOS_RECOVERY__) {
+    // Login normal — si no tenemos perfil cargado, arrancamos
+    if (!state.profile) bootstrapSession();
+    return;
+  }
+
+  if (event === 'USER_UPDATED') {
+    // Se disparó después de updateUser() exitoso — limpiar flag
+    window.__HOLOS_RECOVERY__ = false;
+    return;
+  }
+
   if (event === 'SIGNED_OUT') {
     window.__HOLOS_RECOVERY__ = false;
-    state.session = null; state.profile = null;
+    state.session = null;
+    state.profile = null;
     showScreen('login-screen');
     showLoginPanel('panel-login');
-  }
-  if (event === 'SIGNED_IN' && !window.__HOLOS_RECOVERY__) {
-    // Login normal (no recovery) — arrancar la sesión si no está iniciada
-    if (!state.profile) bootstrapSession();
   }
 });
 
