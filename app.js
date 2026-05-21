@@ -3011,23 +3011,52 @@ $('config-msg-save').onclick = async () => {
    15. BOOT
 ═══════════════════════════════════════════════════════════════ */
 
-bootstrapSession();
+// ── Detectar si venimos de un link de recovery ANTES de todo ──
+// Supabase pone el token en el hash: #access_token=...&type=recovery
+// Si lo detectamos acá, mostramos el panel de nueva contraseña
+// directamente sin pasar por bootstrapSession.
+(function checkRecoveryOnLoad() {
+  const hash = window.location.hash;
+  if (!hash) return;
+  const params = new URLSearchParams(hash.slice(1)); // quitar el #
+  if (params.get('type') === 'recovery') {
+    // Limpiar el hash de la URL para que no quede visible
+    window.history.replaceState(null, '', window.location.pathname);
+    // Mostrar el panel de nueva contraseña inmediatamente
+    showScreen('login-screen');
+    showLoginPanel('panel-nueva-pass');
+    $('nueva-pass-1').focus();
+    // Marcar que estamos en modo recovery para que bootstrapSession no arranque
+    window.__HOLOS_RECOVERY__ = true;
+  }
+})();
+
+if (!window.__HOLOS_RECOVERY__) {
+  bootstrapSession();
+}
 
 // ── Reaccionar a cambios de sesión ─────────────────────────────
 db.auth.onAuthStateChange((event, session) => {
   if (event === 'PASSWORD_RECOVERY') {
-    // El usuario llegó desde el link del email de reset.
-    // Supabase ya validó el token y estableció una sesión temporal.
-    // Mostramos el panel para que elija la nueva contraseña.
+    // Token de recovery detectado vía evento (segundo mecanismo de seguridad).
+    // Si ya mostramos el panel desde checkRecoveryOnLoad, no hacer nada.
+    // Si no (ej: el hash ya fue consumido por Supabase antes de que lo leyéramos),
+    // lo mostramos ahora.
+    window.__HOLOS_RECOVERY__ = true;
     showScreen('login-screen');
     showLoginPanel('panel-nueva-pass');
     $('nueva-pass-1').focus();
     return;
   }
   if (event === 'SIGNED_OUT') {
+    window.__HOLOS_RECOVERY__ = false;
     state.session = null; state.profile = null;
     showScreen('login-screen');
     showLoginPanel('panel-login');
+  }
+  if (event === 'SIGNED_IN' && !window.__HOLOS_RECOVERY__) {
+    // Login normal (no recovery) — arrancar la sesión si no está iniciada
+    if (!state.profile) bootstrapSession();
   }
 });
 
