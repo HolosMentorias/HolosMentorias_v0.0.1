@@ -112,7 +112,27 @@
       <p class="login-footer">Holos Capital Counseling</p>
     </div>
 
-    <!-- PANEL NUEVA CONTRASEÑA (tras click en link del email) -->
+    <!-- PANEL RESET PASSWORD (solicitar link) -->
+    <div class="login-card hidden" id="panel-reset">
+      <div class="login-logo">
+        <span class="logo-leaf">🌿</span>
+        <h1>Recuperar<br/><em>contraseña</em></h1>
+      </div>
+      <p class="login-tagline">Te enviamos un link a tu email</p>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="reset-email" placeholder="tu@email.com" autocomplete="email" />
+      </div>
+      <p id="reset-error" class="error-msg hidden"></p>
+      <p id="reset-ok" class="ok-msg hidden"></p>
+      <button class="btn-primary" id="btn-reset">Enviar link de recuperación</button>
+      <div class="login-links">
+        <button class="link-btn" id="ir-login-desde-reset">← Volver al inicio de sesión</button>
+      </div>
+      <p class="login-footer">Holos Capital Counseling</p>
+    </div>
+
+    <!-- PANEL NUEVA CONTRASEÑA (tras click en el link del email) -->
     <div class="login-card hidden" id="panel-nueva-pass">
       <div class="login-logo">
         <span class="logo-leaf">🌿</span>
@@ -144,24 +164,8 @@
       <button class="btn-primary" id="btn-nueva-pass">Guardar nueva contraseña</button>
       <p class="login-footer">Holos Capital Counseling</p>
     </div>
-      <div class="login-logo">
-        <span class="logo-leaf">🌿</span>
-        <h1>Recuperar<br/><em>contraseña</em></h1>
-      </div>
-      <p class="login-tagline">Te enviamos un link a tu email</p>
-      <div class="form-group">
-        <label>Email</label>
-        <input type="email" id="reset-email" placeholder="tu@email.com" autocomplete="email" />
-      </div>
-      <p id="reset-error" class="error-msg hidden"></p>
-      <p id="reset-ok" class="ok-msg hidden"></p>
-      <button class="btn-primary" id="btn-reset">Enviar link de recuperación</button>
-      <div class="login-links">
-        <button class="link-btn" id="ir-login-desde-reset">← Volver al inicio de sesión</button>
-      </div>
-      <p class="login-footer">Holos Capital Counseling</p>
-    </div>
-  </div>
+
+  </div><!-- fin #login-screen -->
 
   <!-- ═══════════════════════════════════════════════════════════
        PANTALLA "SIN ROL ASIGNADO"
