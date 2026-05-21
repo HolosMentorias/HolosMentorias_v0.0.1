@@ -616,7 +616,17 @@ async function bootstrapSession() {
 }
 
 function renderHeader() {
-  $('header-user').textContent = fullName(state.profile);
+  const rolLabel = {
+    super_admin: 'Super Admin',
+    admin:       'Administrador',
+    mentor:      'Mentor'
+  }[state.profile.rol] || '';
+
+  $('header-user').innerHTML = `
+    <span class="header-user-name">${escapeHtml(fullName(state.profile))}</span>
+    ${rolLabel ? `<span class="header-user-rol">${rolLabel}</span>` : ''}
+  `;
+
   if (state.profile.avatar_url) {
     $('avatar-thumb').src = state.profile.avatar_url;
     $('avatar-thumb').classList.add('visible');
