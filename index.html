@@ -112,8 +112,38 @@
       <p class="login-footer">Holos Capital Counseling</p>
     </div>
 
-    <!-- PANEL RESET -->
-    <div class="login-card hidden" id="panel-reset">
+    <!-- PANEL NUEVA CONTRASEÑA (tras click en link del email) -->
+    <div class="login-card hidden" id="panel-nueva-pass">
+      <div class="login-logo">
+        <span class="logo-leaf">🌿</span>
+        <h1>Nueva<br/><em>contraseña</em></h1>
+      </div>
+      <p class="login-tagline">Elegí una contraseña nueva para tu cuenta.</p>
+      <div class="form-group">
+        <label>Nueva contraseña</label>
+        <div class="input-pass-wrap">
+          <input type="password" id="nueva-pass-1" placeholder="Mínimo 8 caracteres" autocomplete="new-password" />
+          <button type="button" class="btn-ojo" data-target="nueva-pass-1" tabindex="-1" aria-label="Mostrar contraseña">
+            <svg class="ojo-cerrado" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="ojo-abierto" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Confirmar contraseña</label>
+        <div class="input-pass-wrap">
+          <input type="password" id="nueva-pass-2" placeholder="Repetí la contraseña" autocomplete="new-password" />
+          <button type="button" class="btn-ojo" data-target="nueva-pass-2" tabindex="-1" aria-label="Mostrar contraseña">
+            <svg class="ojo-cerrado" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="ojo-abierto" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
+      </div>
+      <p id="nueva-pass-error" class="error-msg hidden"></p>
+      <p id="nueva-pass-ok" class="ok-msg hidden"></p>
+      <button class="btn-primary" id="btn-nueva-pass">Guardar nueva contraseña</button>
+      <p class="login-footer">Holos Capital Counseling</p>
+    </div>
       <div class="login-logo">
         <span class="logo-leaf">🌿</span>
         <h1>Recuperar<br/><em>contraseña</em></h1>

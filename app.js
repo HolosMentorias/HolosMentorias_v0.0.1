@@ -276,9 +276,10 @@ function showScreen(id) {
 }
 
 function showLoginPanel(panelId) {
-  ['panel-login','panel-registro','panel-reset'].forEach(p => $(p).classList.add('hidden'));
+  ['panel-login','panel-registro','panel-reset','panel-nueva-pass']
+    .forEach(p => $(p).classList.add('hidden'));
   $(panelId).classList.remove('hidden');
-  ['login-error','reg-error','reg-ok','reset-error','reset-ok']
+  ['login-error','reg-error','reg-ok','reset-error','reset-ok','nueva-pass-error','nueva-pass-ok']
     .forEach(id => { const e = $(id); if (e) { e.classList.add('hidden'); e.textContent = ''; } });
 }
 
@@ -3012,11 +3013,79 @@ $('config-msg-save').onclick = async () => {
 
 bootstrapSession();
 
-// Reaccionar a cambios de sesión externos (logout en otra pestaña, etc.)
-db.auth.onAuthStateChange((event) => {
+// ── Reaccionar a cambios de sesión ─────────────────────────────
+db.auth.onAuthStateChange((event, session) => {
+  if (event === 'PASSWORD_RECOVERY') {
+    // El usuario llegó desde el link del email de reset.
+    // Supabase ya validó el token y estableció una sesión temporal.
+    // Mostramos el panel para que elija la nueva contraseña.
+    showScreen('login-screen');
+    showLoginPanel('panel-nueva-pass');
+    $('nueva-pass-1').focus();
+    return;
+  }
   if (event === 'SIGNED_OUT') {
     state.session = null; state.profile = null;
     showScreen('login-screen');
     showLoginPanel('panel-login');
   }
+});
+
+// ── Panel: guardar nueva contraseña ───────────────────────────
+$('btn-nueva-pass').onclick = async () => {
+  const pass1 = $('nueva-pass-1').value;
+  const pass2 = $('nueva-pass-2').value;
+  const err   = $('nueva-pass-error');
+  const ok    = $('nueva-pass-ok');
+  err.classList.add('hidden');
+  ok.classList.add('hidden');
+
+  if (!pass1 || !pass2) {
+    err.textContent = 'Completá ambos campos.';
+    err.classList.remove('hidden'); return;
+  }
+  if (pass1.length < 8) {
+    err.textContent = 'La contraseña debe tener al menos 8 caracteres.';
+    err.classList.remove('hidden'); return;
+  }
+  if (pass1 !== pass2) {
+    err.textContent = 'Las contraseñas no coinciden.';
+    err.classList.remove('hidden'); return;
+  }
+
+  const btn = $('btn-nueva-pass');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  const { error } = await db.auth.updateUser({ password: pass1 });
+
+  btn.disabled = false; btn.textContent = 'Guardar nueva contraseña';
+
+  if (error) {
+    console.error('updateUser:', error);
+    if (error.message.includes('same password')) {
+      err.textContent = 'La nueva contraseña no puede ser igual a la anterior.';
+    } else {
+      err.textContent = 'Error al actualizar: ' + error.message;
+    }
+    err.classList.remove('hidden'); return;
+  }
+
+  ok.textContent = '✓ Contraseña actualizada. Redirigiendo...';
+  ok.classList.remove('hidden');
+  $('nueva-pass-1').value = '';
+  $('nueva-pass-2').value = '';
+
+  // Cerrar sesión y volver al login después de 2 segundos
+  // (fuerza un login limpio con la nueva contraseña)
+  setTimeout(async () => {
+    await db.auth.signOut();
+    showLoginPanel('panel-login');
+    toast('Contraseña actualizada. Iniciá sesión con tu nueva contraseña ✓');
+  }, 2000);
+};
+
+['nueva-pass-1','nueva-pass-2'].forEach(id => {
+  $(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') $('btn-nueva-pass').click();
+  });
 });
