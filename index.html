@@ -531,10 +531,16 @@
           <aside class="chat-sidebar" id="adm-chat-sidebar">
             <div class="chat-sidebar-header">
               <h2 class="section-title">Mentores</h2>
-              <button class="btn-secondary btn-mini" id="adm-chat-new" title="Iniciar chat con un mentor">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Nuevo
-              </button>
+              <div class="chat-sidebar-header-actions">
+                <button class="btn-secondary btn-mini btn-broadcast" id="adm-chat-broadcast" title="Enviar mensaje a todos los mentores">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+                  Global
+                </button>
+                <button class="btn-secondary btn-mini" id="adm-chat-new" title="Iniciar chat con un mentor">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Nuevo
+                </button>
+              </div>
             </div>
             <div class="chat-sidebar-search">
               <input type="text" id="adm-chat-search" placeholder="Buscar mentor..." />
@@ -915,6 +921,46 @@
       <div class="modal-body">
         <input type="text" id="pick-mentor-search" placeholder="Buscar mentor..." class="pick-search" />
         <div class="pick-list" id="pick-mentor-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       MODAL · Redactar mensaje global a todos los mentores (admin)
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay hidden" id="modal-broadcast">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>📢 Mensaje a todos los mentores</h2>
+        <button class="btn-icon" id="broadcast-close" aria-label="Cerrar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="hint" style="margin-bottom:14px">
+          Este mensaje va a llegar a <strong>todos los mentores activos</strong> y va a aparecer
+          en su pestaña de Mensajes, sección "Administración".
+        </p>
+
+        <div class="form-group">
+          <label>Aparecer como</label>
+          <select id="broadcast-remitente">
+            <option value="Administración">Administración</option>
+            <option value="__nombre__">(cargando nombre...)</option>
+          </select>
+          <p class="hint">Elegí si querés firmar como "Administración" o con tu nombre.</p>
+        </div>
+
+        <div class="form-group">
+          <label>Mensaje</label>
+          <textarea id="broadcast-texto" rows="6" placeholder="Escribí el mensaje que van a recibir todos los mentores..."></textarea>
+        </div>
+
+        <p id="broadcast-error" class="error-msg hidden"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="broadcast-cancel">Cancelar</button>
+        <button class="btn-primary" id="broadcast-send">Enviar a todos</button>
       </div>
     </div>
   </div>

@@ -2152,6 +2152,15 @@ const chat = {
   globalConversations: [], // copia de las conversaciones para el canal global
   recentlyReadIds: new Set(), // ids marcados como leídos en el canal local
   unread: {},
+  // ── Mensajes globales (broadcast) ──
+  broadcastConvIds: new Set(),   // ids de conversaciones broadcast visibles (mentor)
+  broadcastUnreadCount: 0,       // no leídos de broadcast (mentor)
+  broadcastLastAt: null,         // última actividad de broadcasts (mentor)
+  adminBroadcastConvId: null,    // id de MI propia conversación broadcast (admin)
+  adminBroadcastLastAt: null,
+  viewingAnuncios: false,        // mentor está viendo el feed de Administración
+  viewingAdminBroadcast: false,  // admin está viendo su historial de broadcasts
+  broadcastToastShown: false,    // para no repetir el toast de bienvenida varias veces
 };
 
 // Carga la lista de conversaciones del usuario + los peers disponibles.
@@ -2181,8 +2190,35 @@ async function loadChat(role) {
   chat.peers = peersRes.data || [];
 
   await refreshUnreadCounts(role);
+  await loadBroadcastMeta(role);
   renderChatSidebar(role);
   subscribeRealtime(role);
+}
+
+// Carga metadata de mensajes globales: para el mentor, todas las
+// conversaciones de broadcast visibles + cuántos no leyó.
+// Para el admin, su propia conversación de broadcast (si existe).
+async function loadBroadcastMeta(role) {
+  if (role === 'mentor') {
+    const { data: convs } = await db.from('conversations')
+      .select('id, admin_id, last_message_at')
+      .eq('is_broadcast', true);
+    chat.broadcastConvIds = new Set((convs || []).map(c => c.id));
+    chat.broadcastLastAt = (convs || []).reduce(
+      (max, c) => (c.last_message_at && c.last_message_at > (max || '')) ? c.last_message_at : max,
+      null
+    );
+    const { data: count } = await db.rpc('count_unread_broadcasts');
+    chat.broadcastUnreadCount = count || 0;
+  } else {
+    const { data: conv } = await db.from('conversations')
+      .select('id, last_message_at')
+      .eq('admin_id', state.profile.id)
+      .eq('is_broadcast', true)
+      .maybeSingle();
+    chat.adminBroadcastConvId  = conv?.id || null;
+    chat.adminBroadcastLastAt  = conv?.last_message_at || null;
+  }
 }
 
 // Trae el conteo de mensajes no leídos por conversación (para mí).
@@ -2205,7 +2241,8 @@ async function refreshUnreadCounts(role) {
 }
 
 function updateBadge(role) {
-  const total = Object.values(chat.unread).reduce((a,b) => a+b, 0);
+  const total = Object.values(chat.unread).reduce((a,b) => a+b, 0) +
+                (role === 'mentor' ? (chat.broadcastUnreadCount || 0) : 0);
   const badge = role === 'mentor' ? $('mnt-msg-badge') : $('adm-msg-badge');
   if (!badge) return;
   badge.textContent = total > 99 ? '99+' : total;
@@ -2215,6 +2252,31 @@ function updateBadge(role) {
 function renderChatSidebar(role) {
   const sidebarList = role === 'mentor' ? $('mnt-chat-list') : $('adm-chat-list');
   sidebarList.innerHTML = '';
+
+  // ── Pinned item de mensajes globales (siempre arriba de todo) ──
+  if (role === 'mentor') {
+    const unread = chat.broadcastUnreadCount || 0;
+    sidebarList.insertAdjacentHTML('beforeend', `
+      <div class="chat-item chat-item-pinned ${chat.viewingAnuncios ? 'active' : ''}" id="chat-item-anuncios">
+        <div class="chat-item-avatar-broadcast">📢</div>
+        <div class="chat-item-info">
+          <div class="chat-item-name">Administración</div>
+          <div class="chat-item-preview">${chat.broadcastLastAt ? 'Anuncios · ' + formatRelative(chat.broadcastLastAt) : 'Sin anuncios todavía'}</div>
+        </div>
+        ${unread > 0 ? `<span class="chat-item-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
+      </div>
+    `);
+  } else {
+    sidebarList.insertAdjacentHTML('beforeend', `
+      <div class="chat-item chat-item-pinned ${chat.viewingAdminBroadcast ? 'active' : ''}" id="chat-item-broadcast-admin">
+        <div class="chat-item-avatar-broadcast">📢</div>
+        <div class="chat-item-info">
+          <div class="chat-item-name">Mensajes globales</div>
+          <div class="chat-item-preview">${chat.adminBroadcastLastAt ? 'Enviado ' + formatRelative(chat.adminBroadcastLastAt) : 'Todavía no enviaste ninguno'}</div>
+        </div>
+      </div>
+    `);
+  }
 
   // Para mostrar peers: por defecto mentor ve TODOS los admins
   // (independiente de si ya hay conversación). Admin sólo ve los
@@ -2251,33 +2313,38 @@ function renderChatSidebar(role) {
   }
 
   if (!items.length) {
-    sidebarList.innerHTML = role === 'mentor'
+    sidebarList.insertAdjacentHTML('beforeend', role === 'mentor'
       ? '<div class="empty-state" style="padding:30px 16px"><span>🌿</span><p>No hay administradores disponibles.</p></div>'
-      : '<div class="empty-state" style="padding:30px 16px"><span>💬</span><p>Aún no hay chats.<br/>Tocá "Nuevo" para empezar uno.</p></div>';
-    return;
-  }
-
-  for (const { peer, conv } of items) {
-    const unread = conv ? (chat.unread[conv.id] || 0) : 0;
-    const isActive = chat.active && conv && chat.active.id === conv.id;
-    const av = peer.avatar_url
-      ? `<img class="chat-item-avatar" src="${escapeHtml(peer.avatar_url)}" alt=""/>`
-      : `<div class="chat-item-avatar-placeholder">${escapeHtml(initials(peer))}</div>`;
-    sidebarList.insertAdjacentHTML('beforeend', `
-      <div class="chat-item ${isActive ? 'active' : ''}" data-peer-id="${peer.id}" data-conv-id="${conv?.id || ''}">
-        ${av}
-        <div class="chat-item-info">
-          <div class="chat-item-name">${escapeHtml(fullName(peer))}</div>
-          <div class="chat-item-preview">${conv?.last_message_at ? 'Última actividad: ' + formatRelative(conv.last_message_at) : 'Sin mensajes'}</div>
+      : '<div class="empty-state" style="padding:30px 16px"><span>💬</span><p>Aún no hay chats.<br/>Tocá "Nuevo" para empezar uno.</p></div>');
+  } else {
+    for (const { peer, conv } of items) {
+      const unread = conv ? (chat.unread[conv.id] || 0) : 0;
+      const isActive = chat.active && conv && chat.active.id === conv.id;
+      const av = peer.avatar_url
+        ? `<img class="chat-item-avatar" src="${escapeHtml(peer.avatar_url)}" alt=""/>`
+        : `<div class="chat-item-avatar-placeholder">${escapeHtml(initials(peer))}</div>`;
+      sidebarList.insertAdjacentHTML('beforeend', `
+        <div class="chat-item ${isActive ? 'active' : ''}" data-peer-id="${peer.id}" data-conv-id="${conv?.id || ''}">
+          ${av}
+          <div class="chat-item-info">
+            <div class="chat-item-name">${escapeHtml(fullName(peer))}</div>
+            <div class="chat-item-preview">${conv?.last_message_at ? 'Última actividad: ' + formatRelative(conv.last_message_at) : 'Sin mensajes'}</div>
+          </div>
+          ${unread > 0 ? `<span class="chat-item-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
         </div>
-        ${unread > 0 ? `<span class="chat-item-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
-      </div>
-    `);
+      `);
+    }
   }
 
-  $$('.chat-item', sidebarList).forEach(el => {
+  $$('.chat-item:not(.chat-item-pinned)', sidebarList).forEach(el => {
     el.onclick = () => openConversation(role, el.dataset.peerId);
   });
+
+  // Bind del pinned item
+  const pinnedAnuncios = document.getElementById('chat-item-anuncios');
+  if (pinnedAnuncios) pinnedAnuncios.onclick = () => openAnunciosMentor();
+  const pinnedBroadcastAdmin = document.getElementById('chat-item-broadcast-admin');
+  if (pinnedBroadcastAdmin) pinnedBroadcastAdmin.onclick = () => openBroadcastAdminThread();
 }
 
 function formatRelative(iso) {
@@ -2295,6 +2362,10 @@ function formatRelative(iso) {
 async function openConversation(role, peerId) {
   const peer = chat.peers.find(p => p.id === peerId);
   if (!peer) { toast('Usuario no encontrado','error'); return; }
+
+  // Salir del modo "viendo anuncios/broadcast" si estaba activo
+  chat.viewingAnuncios = false;
+  chat.viewingAdminBroadcast = false;
 
   // Determinar admin_id y mentor_id en función del rol del que llama
   const admin_id  = role === 'mentor' ? peer.id : state.profile.id;
@@ -2550,6 +2621,13 @@ async function startGlobalNotifications(role) {
   // y calcular el badge al entrar.
   await refreshGlobalUnread(role);
 
+  // Mentor: si ya había anuncios sin leer al momento de loguear,
+  // mostrar el cartel de aviso una vez (no repetir en cada cambio de pestaña).
+  if (role === 'mentor' && chat.broadcastUnreadCount > 0 && !chat.broadcastToastShown) {
+    chat.broadcastToastShown = true;
+    showBroadcastToast();
+  }
+
   chat.globalChannel = db.channel('chat-global-' + state.profile.id)
     .on('postgres_changes', {
       event: 'INSERT',
@@ -2567,7 +2645,40 @@ async function startGlobalNotifications(role) {
         return;
       }
 
-      // ¿Es de una conversación mía?
+      // ── ¿Es un mensaje GLOBAL (broadcast)? Sólo aplica a mentores. ──
+      if (role === 'mentor') {
+        let esBroadcast = chat.broadcastConvIds.has(m.conversation_id);
+
+        // Si no la conocíamos, puede ser un broadcast nuevo (primera vez
+        // que un admin manda uno, o uno de un admin distinto) — verificar.
+        if (!esBroadcast && !chat.globalConversations?.find(c => c.id === m.conversation_id)) {
+          const { data: convCheck } = await db.from('conversations')
+            .select('id, is_broadcast').eq('id', m.conversation_id).maybeSingle();
+          if (convCheck?.is_broadcast) {
+            chat.broadcastConvIds.add(convCheck.id);
+            esBroadcast = true;
+          }
+        }
+
+        if (esBroadcast) {
+          chat.broadcastLastAt = m.created_at;
+          const viendoAnuncios = state.currentView === 'mentor-mensajes' && chat.viewingAnuncios;
+          if (viendoAnuncios) {
+            // Ya está mirando el feed → refrescarlo en vivo en vez de
+            // sólo actualizar el badge (si no, el mensaje no aparecería
+            // hasta salir y volver a entrar).
+            openAnunciosMentor();
+          } else {
+            chat.broadcastUnreadCount = (chat.broadcastUnreadCount || 0) + 1;
+            updateBadge('mentor');
+            showBroadcastToast();
+          }
+          if (state.currentView === 'mentor-mensajes' && !viendoAnuncios) renderChatSidebar('mentor');
+          return; // no seguir tratándolo como mensaje 1-a-1
+        }
+      }
+
+      // ¿Es de una conversación mía (1-a-1)?
       let conv = chat.globalConversations?.find(c => c.id === m.conversation_id);
 
       if (!conv) {
@@ -2625,20 +2736,30 @@ async function refreshGlobalUnread(role) {
     .eq('is_broadcast', false);
   chat.globalConversations = convData || [];
 
-  if (!chat.globalConversations.length) { updateBadge(role); return; }
-
-  const ids = chat.globalConversations.map(c => c.id);
-  const { data: unreadData } = await db
-    .from('messages')
-    .select('conversation_id')
-    .in('conversation_id', ids)
-    .neq('sender_id', state.profile.id)
-    .is('read_at', null);
-
   chat.unread = {};
-  for (const m of (unreadData || [])) {
-    chat.unread[m.conversation_id] = (chat.unread[m.conversation_id] || 0) + 1;
+  if (chat.globalConversations.length) {
+    const ids = chat.globalConversations.map(c => c.id);
+    const { data: unreadData } = await db
+      .from('messages')
+      .select('conversation_id')
+      .in('conversation_id', ids)
+      .neq('sender_id', state.profile.id)
+      .is('read_at', null);
+
+    for (const m of (unreadData || [])) {
+      chat.unread[m.conversation_id] = (chat.unread[m.conversation_id] || 0) + 1;
+    }
   }
+
+  // Metadata de mensajes globales (broadcast) — sólo aplica a mentores.
+  if (role === 'mentor') {
+    const { data: bConvs } = await db.from('conversations')
+      .select('id').eq('is_broadcast', true);
+    chat.broadcastConvIds = new Set((bConvs || []).map(c => c.id));
+    const { data: count } = await db.rpc('count_unread_broadcasts');
+    chat.broadcastUnreadCount = count || 0;
+  }
+
   updateBadge(role);
 }
 
@@ -2686,6 +2807,325 @@ function showNotifToast(sender, preview, role) {
     nt.className = 'notif-toast notif-toast-exit';
   }, 6000);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   MENSAJES GLOBALES (broadcast) — admin → todos los mentores
+
+   Modelo: una conversación is_broadcast=true por admin
+   (mentor_id = null). Los mentores ven TODAS las conversaciones
+   de broadcast (de cualquier admin) combinadas en un único feed
+   de sólo lectura llamado "Administración".
+
+   Lectura: como messages.read_at es una sola columna compartida
+   (no sirve para 1-a-muchos), se usa la tabla broadcast_reads
+   que registra la lectura POR MENTOR, vía las RPCs
+   count_unread_broadcasts() y mark_all_broadcasts_read().
+═══════════════════════════════════════════════════════════════ */
+
+// Toast específico de mensaje global — siempre esquina inferior derecha,
+// con la leyenda fija pedida, independiente del toast de chat 1-a-1.
+function showBroadcastToast() {
+  let nt = document.getElementById('broadcast-toast');
+  if (!nt) {
+    nt = document.createElement('div');
+    nt.id = 'broadcast-toast';
+    document.body.appendChild(nt);
+  }
+  nt.innerHTML = `
+    <div class="notif-toast-inner">
+      <div class="notif-toast-icon">📢</div>
+      <div class="notif-toast-body">
+        <div class="notif-toast-sender">Tienes un nuevo mensaje</div>
+        <div class="notif-toast-preview">Administración envió un anuncio</div>
+      </div>
+      <button class="notif-toast-action">Ver</button>
+      <button class="notif-toast-close" aria-label="Cerrar">✕</button>
+    </div>
+  `;
+  nt.className = 'notif-toast notif-toast-broadcast notif-toast-enter';
+
+  nt.querySelector('.notif-toast-action').onclick = () => {
+    nt.className = 'notif-toast notif-toast-broadcast notif-toast-exit';
+    switchView('mentor-mensajes');
+    $$('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.view === 'mentor-mensajes'));
+    setTimeout(() => openAnunciosMentor(), 150);
+  };
+  nt.querySelector('.notif-toast-close').onclick = () => {
+    nt.className = 'notif-toast notif-toast-broadcast notif-toast-exit';
+  };
+
+  clearTimeout(nt._timer);
+  nt._timer = setTimeout(() => {
+    nt.className = 'notif-toast notif-toast-broadcast notif-toast-exit';
+  }, 7000);
+}
+
+/* ── MENTOR: feed de anuncios (sólo lectura) ── */
+
+async function openAnunciosMentor() {
+  chat.active = null;
+  chat.viewingAnuncios = true;
+  chat.viewingAdminBroadcast = false;
+  renderChatSidebar('mentor');
+
+  const main = $('mnt-chat-main');
+  main.innerHTML = `
+    <div class="chat-header">
+      <button class="chat-header-back" id="chat-back" aria-label="Volver">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,18 9,12 15,6"/></svg>
+      </button>
+      <div class="chat-header-avatar-placeholder chat-item-avatar-broadcast">📢</div>
+      <div class="chat-header-info">
+        <div class="chat-header-name">Administración</div>
+        <div class="chat-header-sub">Anuncios para todos los mentores</div>
+      </div>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="loading-state"><div class="spinner"></div><p>Cargando anuncios...</p></div>
+    </div>
+    <div class="broadcast-readonly-note">📨 Este es un mensaje informativo. Para responder, escribile directamente a un administrador desde la lista.</div>
+  `;
+  $('chat-back').onclick = () => {
+    document.querySelector('[data-chat-context="mentor"]')?.classList.remove('has-active');
+    chat.viewingAnuncios = false;
+    renderChatMain('mentor');
+  };
+
+  document.querySelector('[data-chat-context="mentor"]')?.classList.add('has-active');
+
+  const ids = [...chat.broadcastConvIds];
+  if (!ids.length) {
+    $('chat-messages').innerHTML = '<div class="empty-state" style="padding:30px"><span>📢</span><p>Todavía no hay anuncios.</p></div>';
+    return;
+  }
+
+  const { data: msgs, error } = await db.from('messages')
+    .select('id, conversation_id, sender_id, body, created_at, remitente_label')
+    .in('conversation_id', ids)
+    .order('created_at', { ascending: true })
+    .limit(300);
+
+  if (error) {
+    $('chat-messages').innerHTML = '<div class="empty-state" style="padding:30px"><p>Error al cargar anuncios.</p></div>';
+    return;
+  }
+
+  // Fallback de nombre si el mensaje no tiene remitente_label guardado
+  const senderIds = [...new Set((msgs || []).map(m => m.sender_id))];
+  let senderMap = new Map();
+  if (senderIds.length) {
+    const { data: senders } = await db.from('profiles')
+      .select('id,nombre,apellido,email').in('id', senderIds);
+    senderMap = new Map((senders || []).map(s => [s.id, s]));
+  }
+
+  renderAnunciosFeed(msgs || [], senderMap);
+
+  // Marcar todos como leídos de una — más eficiente que uno por uno
+  await db.rpc('mark_all_broadcasts_read');
+  chat.broadcastUnreadCount = 0;
+  updateBadge('mentor');
+  renderChatSidebar('mentor');
+}
+
+function renderAnunciosFeed(msgs, senderMap) {
+  const cont = $('chat-messages');
+  if (!cont) return;
+  if (!msgs.length) {
+    cont.innerHTML = '<div class="empty-state" style="padding:30px"><span>📢</span><p>Todavía no hay anuncios.</p></div>';
+    return;
+  }
+  cont.innerHTML = '';
+  let lastDay = '';
+  for (const m of msgs) {
+    const d = new Date(m.created_at);
+    const dayKey = d.toLocaleDateString('es-AR');
+    if (dayKey !== lastDay) {
+      const today = new Date().toLocaleDateString('es-AR');
+      const yest  = new Date(Date.now() - 86400000).toLocaleDateString('es-AR');
+      const label = dayKey === today ? 'Hoy' : (dayKey === yest ? 'Ayer' : dayKey);
+      cont.insertAdjacentHTML('beforeend', `<div class="chat-day-divider">${label}</div>`);
+      lastDay = dayKey;
+    }
+    const hh = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+    const remitente = m.remitente_label || fullName(senderMap.get(m.sender_id)) || 'Administración';
+    cont.insertAdjacentHTML('beforeend', `
+      <div class="msg-bubble from-them msg-bubble-broadcast">
+        <div class="msg-broadcast-sender">📢 ${escapeHtml(remitente)}</div>
+        ${escapeHtml(m.body).replace(/\n/g, '<br/>')}
+        <span class="msg-time">${hh}</span>
+      </div>
+    `);
+  }
+  requestAnimationFrame(() => { cont.scrollTop = cont.scrollHeight; });
+}
+
+/* ── ADMIN: historial de mis propios mensajes globales ── */
+
+async function openBroadcastAdminThread() {
+  chat.active = null;
+  chat.viewingAdminBroadcast = true;
+  renderChatSidebar('admin');
+
+  const main = $('adm-chat-main');
+  main.innerHTML = `
+    <div class="chat-header">
+      <button class="chat-header-back" id="chat-back" aria-label="Volver">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,18 9,12 15,6"/></svg>
+      </button>
+      <div class="chat-header-avatar-placeholder chat-item-avatar-broadcast">📢</div>
+      <div class="chat-header-info">
+        <div class="chat-header-name">Mensajes globales</div>
+        <div class="chat-header-sub">Visible para todos los mentores activos</div>
+      </div>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="loading-state"><div class="spinner"></div><p>Cargando...</p></div>
+    </div>
+    <button class="btn-primary btn-new-broadcast-inline" id="btn-broadcast-inline">
+      📢 Nuevo mensaje global
+    </button>
+  `;
+  $('chat-back').onclick = () => {
+    document.querySelector('[data-chat-context="admin"]')?.classList.remove('has-active');
+    chat.viewingAdminBroadcast = false;
+    renderChatMain('admin');
+  };
+  $('btn-broadcast-inline').onclick = () => openBroadcastComposeModal();
+
+  document.querySelector('[data-chat-context="admin"]')?.classList.add('has-active');
+
+  if (chat.adminBroadcastConvId) {
+    const { data } = await db.from('messages')
+      .select('id, sender_id, body, created_at, remitente_label')
+      .eq('conversation_id', chat.adminBroadcastConvId)
+      .order('created_at', { ascending: true });
+    renderBroadcastAdminMessages(data || []);
+  } else {
+    $('chat-messages').innerHTML = '<div class="empty-state" style="padding:30px"><span>📢</span><p>Todavía no enviaste ningún mensaje global.</p></div>';
+  }
+}
+
+function renderBroadcastAdminMessages(msgs) {
+  const cont = $('chat-messages');
+  if (!cont) return;
+  if (!msgs.length) {
+    cont.innerHTML = '<div class="empty-state" style="padding:30px"><span>📢</span><p>Todavía no enviaste ningún mensaje global.</p></div>';
+    return;
+  }
+  cont.innerHTML = '';
+  let lastDay = '';
+  for (const m of msgs) {
+    const d = new Date(m.created_at);
+    const dayKey = d.toLocaleDateString('es-AR');
+    if (dayKey !== lastDay) {
+      const today = new Date().toLocaleDateString('es-AR');
+      const yest  = new Date(Date.now() - 86400000).toLocaleDateString('es-AR');
+      cont.insertAdjacentHTML('beforeend',
+        `<div class="chat-day-divider">${dayKey === today ? 'Hoy' : (dayKey === yest ? 'Ayer' : dayKey)}</div>`);
+      lastDay = dayKey;
+    }
+    const hh = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+    cont.insertAdjacentHTML('beforeend', `
+      <div class="msg-bubble from-me msg-bubble-broadcast">
+        <div class="msg-broadcast-sender">📢 ${escapeHtml(m.remitente_label || 'Administración')}</div>
+        ${escapeHtml(m.body).replace(/\n/g, '<br/>')}
+        <span class="msg-time">${hh}</span>
+      </div>
+    `);
+  }
+  requestAnimationFrame(() => { cont.scrollTop = cont.scrollHeight; });
+}
+
+/* ── ADMIN: modal de composición del mensaje global ── */
+
+function openBroadcastComposeModal() {
+  $('broadcast-texto').value = '';
+  $('broadcast-error').classList.add('hidden');
+
+  const sel = $('broadcast-remitente');
+  sel.innerHTML = `
+    <option value="Administración">Administración</option>
+    <option value="${escapeHtml(fullName(state.profile))}">${escapeHtml(fullName(state.profile))}</option>
+  `;
+
+  $('modal-broadcast').classList.remove('hidden');
+  setTimeout(() => $('broadcast-texto').focus(), 50);
+}
+
+$('adm-chat-broadcast').onclick = () => openBroadcastComposeModal();
+$('broadcast-close').onclick    = () => $('modal-broadcast').classList.add('hidden');
+$('broadcast-cancel').onclick   = () => $('modal-broadcast').classList.add('hidden');
+
+$('broadcast-send').onclick = async () => {
+  const body = $('broadcast-texto').value.trim();
+  const remitente = $('broadcast-remitente').value;
+  const err = $('broadcast-error');
+  err.classList.add('hidden');
+
+  if (!body) {
+    err.textContent = 'Escribí un mensaje.';
+    err.classList.remove('hidden'); return;
+  }
+  if (body.length > 4000) {
+    err.textContent = 'El mensaje es demasiado largo (máx 4000 caracteres).';
+    err.classList.remove('hidden'); return;
+  }
+
+  const btn = $('broadcast-send');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+
+  // 1) Obtener (o crear) mi conversación de broadcast
+  const { data: convId, error: convErr } = await db.rpc('get_or_create_broadcast', {
+    p_admin_id: state.profile.id
+  });
+  if (convErr) {
+    console.error('get_or_create_broadcast:', convErr);
+    err.textContent = 'Error: ' + convErr.message;
+    err.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Enviar a todos';
+    return;
+  }
+  chat.adminBroadcastConvId = convId;
+
+  // 2) Insertar el mensaje
+  const { data, error } = await db.from('messages')
+    .insert({
+      conversation_id: convId,
+      sender_id: state.profile.id,
+      body,
+      remitente_label: remitente
+    })
+    .select()
+    .single();
+
+  btn.disabled = false; btn.textContent = 'Enviar a todos';
+
+  if (error) {
+    console.error('broadcast insert:', error);
+    err.textContent = 'Error al enviar: ' + error.message;
+    err.classList.remove('hidden');
+    return;
+  }
+
+  chat.adminBroadcastLastAt = data.created_at;
+  $('modal-broadcast').classList.add('hidden');
+  toast('Mensaje enviado a todos los mentores ✓');
+
+  // Si estoy viendo el thread de broadcast, refrescarlo
+  if (chat.viewingAdminBroadcast) {
+    const { data: msgs } = await db.from('messages')
+      .select('id, sender_id, body, created_at, remitente_label')
+      .eq('conversation_id', convId)
+      .order('created_at', { ascending: true });
+    renderBroadcastAdminMessages(msgs || []);
+  }
+  renderChatSidebar('admin');
+};
+
+$('broadcast-texto').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) $('broadcast-send').click();
+});
 
 // Listeners propios del admin (búsqueda y "Nuevo")
 $('adm-chat-search')?.addEventListener('input', () => renderChatSidebar('admin'));
