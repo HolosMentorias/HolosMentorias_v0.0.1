@@ -82,12 +82,11 @@ body {
   overflow-x: hidden !important;
   display: none !important;
 }
-/* Flex row: justify-content centra horizontalmente */
 #login-screen.active {
   display: flex !important;
-  flex-direction: row !important;
-  align-items: flex-start !important;
-  justify-content: center !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
   padding: 40px 24px !important;
   animation: fadeIn .25s ease both;
 }
@@ -114,25 +113,28 @@ body {
   background: #C4825A;
   bottom: -60px; left: -60px;
 }
-/*
- * ANCHO FIJO — sin width:100% que confunde al algoritmo flex.
- * 400px fijo + max-width como fallback para pantallas pequeñas.
- * flex-shrink:0 evita que se achique y flex-grow:0 evita que crezca.
- */
+/* wrapper opcional — si está presente ayuda, si no el login-card
+   se centra solo gracias a su propio max-width + margin:0 auto */
 .login-panels {
-  width: 400px;
-  max-width: calc(100vw - 48px);
-  flex: 0 0 auto;
+  width: 100%;
+  max-width: 400px;
+  flex-shrink: 0;
   position: relative;
   z-index: 1;
 }
+/* La card se centra SOLA: max-width + margin:0 auto es el fallback
+   que funciona incluso sin el wrapper login-panels */
 .login-card {
   background: rgba(250,247,242,.97);
   border-radius: var(--radius-xl);
   padding: 40px 32px 36px;
   width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
   box-shadow: var(--shadow-lg);
   animation: slideUp .5s cubic-bezier(.34,1.56,.64,1) both;
+  position: relative;
+  z-index: 1;
 }
 .login-card.hidden { display: none !important; }
 
