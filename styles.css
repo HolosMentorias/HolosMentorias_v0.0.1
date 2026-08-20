@@ -85,6 +85,24 @@ body {
   background: linear-gradient(145deg, #2C2417 0%, #3D3425 50%, #1E3A1A 100%);
 }
 
+.login-card {
+  position: relative;
+  background: rgba(250,247,242,.97);
+  border-radius: var(--radius-xl);
+  padding: 40px 32px 36px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: var(--shadow-lg);
+  animation: slideUp .5s cubic-bezier(.34,1.56,.64,1) both;
+  /* Centrado explícito: aunque haya otros paneles hidden en el flex */
+  margin: auto;
+}
+
+/* Ocultar los paneles que no están activos sin romper el flex */
+.login-card.hidden {
+  display: none !important;
+}
+
 .login-bg { position: absolute; inset: 0; pointer-events: none; }
 
 .login-orb {
