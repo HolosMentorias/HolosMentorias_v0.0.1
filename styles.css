@@ -3717,11 +3717,18 @@ input:checked + .switch-track-video { background: #3B82F6; }
 
 /* ── Footer de versión ── */
 .app-version-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
   text-align: center;
   font-size: 11px;
   color: var(--text-muted);
-  padding: 16px 0 24px;
+  padding: 6px 0;
   letter-spacing: .3px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  z-index: 10;
 }
 .app-version-footer span {
   font-weight: 600;
