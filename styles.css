@@ -72,9 +72,8 @@ body {
 }
 
 /* ══════════════════════════════════════
-   LOGIN
+   LOGIN — centrado a prueba de balas
 ══════════════════════════════════════ */
-/* Override: el login-screen necesita flex en lugar de block */
 #login-screen {
   background: linear-gradient(145deg, #2C2417 0%, #3D3425 50%, #1E3A1A 100%) !important;
   position: fixed !important;
@@ -83,40 +82,18 @@ body {
 }
 #login-screen.active {
   display: flex !important;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
+  flex-direction: column !important;
+  align-items: center !important;
+  padding: 40px 24px !important;
   animation: fadeIn .25s ease both;
 }
-
-/* Único hijo flex: contiene todos los paneles.
-   Al ser el único elemento no-absolute del login-screen,
-   siempre queda perfectamente centrado. */
-.login-panels {
-  width: 100%;
-  max-width: 400px;
-  position: relative;  /* z-index sobre los orbs */
-  z-index: 1;
-}
-
-.login-card {
-  background: rgba(250,247,242,.97);
-  border-radius: var(--radius-xl);
-  padding: 40px 32px 36px;
-  width: 100%;
-  box-shadow: var(--shadow-lg);
-  animation: slideUp .5s cubic-bezier(.34,1.56,.64,1) both;
-}
-
-.login-card.hidden { display: none !important; }
-
 .login-bg {
-  position: fixed;   /* fixed igual que el login-screen */
+  position: fixed;
   inset: 0;
   pointer-events: none;
+  z-index: 0;
   overflow: hidden;
 }
-
 .login-orb {
   position: absolute;
   border-radius: 50%;
@@ -133,17 +110,23 @@ body {
   background: #C4825A;
   bottom: -60px; left: -60px;
 }
-
-.login-card {
+/* Contenedor único: margin:auto lo centra en el flex-column */
+.login-panels {
+  width: 100%;
+  max-width: 400px;
+  margin: auto;
   position: relative;
+  z-index: 1;
+}
+.login-card {
   background: rgba(250,247,242,.97);
   border-radius: var(--radius-xl);
   padding: 40px 32px 36px;
   width: 100%;
-  max-width: 400px;
   box-shadow: var(--shadow-lg);
   animation: slideUp .5s cubic-bezier(.34,1.56,.64,1) both;
 }
+.login-card.hidden { display: none !important; }
 
 .login-logo {
   display: flex;
