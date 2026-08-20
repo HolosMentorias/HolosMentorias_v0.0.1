@@ -74,15 +74,25 @@ body {
 /* ══════════════════════════════════════
    LOGIN
 ══════════════════════════════════════ */
+/*
+ * El login-screen es un flex container que cubre toda la pantalla.
+ * display:none / display:flex se controla con la clase .active.
+ * NO usamos position:fixed en los hijos para evitar clipping
+ * en Chromium cuando el padre tiene overflow:hidden.
+ */
 #login-screen {
   background: linear-gradient(145deg, #2C2417 0%, #3D3425 50%, #1E3A1A 100%) !important;
   position: fixed !important;
   inset: 0 !important;
-  overflow: hidden !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   display: none !important;
+  /* NO overflow:hidden aquí — necesitamos que los hijos se centren bien */
 }
 #login-screen.active {
-  display: block !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
   animation: fadeIn .25s ease both;
 }
 .login-bg {
@@ -109,23 +119,21 @@ body {
   bottom: -60px; left: -60px;
 }
 /*
- * CENTRADO DEFINITIVO con position:fixed + transform.
- * Este método NO depende del padre: left:50% mueve el borde izquierdo
- * al centro exacto del viewport, y translateX(-50%) lo desplaza hacia
- * atrás la mitad de su propio ancho. Resultado: SIEMPRE centrado.
- * No se ve afectado por overflow, scrollbars, ni ninguna otra propiedad
- * del padre.
+ * El centrado definitivo:
+ * - #login-screen es flex con justify-content:center
+ *   → centra .login-panels horizontalmente SIN margin:auto
+ * - .login-panels usa margin-top:auto y margin-bottom:auto
+ *   para centrar verticalmente dentro del scroll container
+ * - SIN position:fixed en el hijo (evita el clipping de Chromium)
  */
 .login-panels {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(400px, calc(100vw - 48px));
-  max-height: calc(100dvh - 48px);
-  overflow-y: auto;
+  position: relative;
   z-index: 1;
-  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  max-width: 400px;
+  flex-shrink: 0;
+  margin: auto 0;          /* centrado vertical */
+  padding: 24px 24px;
 }
 .login-card {
   background: rgba(250,247,242,.97);
