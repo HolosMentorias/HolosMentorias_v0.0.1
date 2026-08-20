@@ -4276,3 +4276,57 @@ input:checked + .switch-track-video { background: #3B82F6; }
 }
 .btn-asignar-grupo:hover { background: var(--accent); color: white; }
 
+
+
+/* ═══════════════════════════════════════════════════════════════
+   HOLOS · Logo oficial (reemplaza el emoji 🌿)
+═══════════════════════════════════════════════════════════════ */
+
+/* Logo en el HEADER de la app */
+.header-logo-img {
+  height: 36px;
+  width: auto;
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* "Mentorías" al lado del logo en el header */
+.brand-name-mentorias {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 17px;
+  color: var(--accent-dark);
+  letter-spacing: .2px;
+  line-height: 1;
+}
+
+/* Logo en el LOGIN */
+.login-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.login-logo-img {
+  height: 64px;
+  width: auto;
+  object-fit: contain;
+}
+.login-logo-mentorias {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 22px;
+  color: var(--accent-dark);
+  margin: 0;
+  letter-spacing: .3px;
+}
+
+/* Ajustar el brand del header para que el logo quepa bien */
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
