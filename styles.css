@@ -3991,6 +3991,7 @@ input:checked + .switch-track-video { background: #3B82F6; }
 .modal-card-grupo {
   max-width: 580px;
   width: 100%;
+  height: 90dvh;           /* altura fija para que el modal tenga límite */
   max-height: 90dvh;
   display: flex;
   flex-direction: column;
@@ -4001,10 +4002,25 @@ input:checked + .switch-track-video { background: #3B82F6; }
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding-bottom: 0;
+  padding: 0;              /* sin padding: lo maneja cada sub-sección */
+  min-height: 0;           /* clave para que flex no expanda sin límite */
 }
 
-/* Header con color del mentor */
+/* El header con buscador es fijo, la lista scrollea */
+.grupo-search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;          /* nunca se achica */
+}
+.grupo-alumno-list {
+  flex: 1;
+  overflow-y: auto;        /* ESTA es la parte que scrollea */
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;           /* clave en flexbox para el scroll */
+}
 .grupo-header {
   padding: 16px 20px;
   border-bottom: 1px solid var(--border);
