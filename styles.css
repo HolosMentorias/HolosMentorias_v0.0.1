@@ -74,15 +74,19 @@ body {
 /* ══════════════════════════════════════
    LOGIN
 ══════════════════════════════════════ */
+/* Override: el login-screen necesita flex en lugar de block */
 #login-screen {
-  min-height: 100dvh;
-  display: flex;
+  background: linear-gradient(145deg, #2C2417 0%, #3D3425 50%, #1E3A1A 100%) !important;
+  position: fixed !important;
+  inset: 0 !important;
+  overflow-y: auto !important;
+}
+#login-screen.active {
+  display: flex !important;
   align-items: center;
   justify-content: center;
   padding: 24px;
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(145deg, #2C2417 0%, #3D3425 50%, #1E3A1A 100%);
+  animation: fadeIn .25s ease both;
 }
 
 /* Único hijo flex: contiene todos los paneles.
@@ -106,7 +110,12 @@ body {
 
 .login-card.hidden { display: none !important; }
 
-.login-bg { position: absolute; inset: 0; pointer-events: none; }
+.login-bg {
+  position: fixed;   /* fixed igual que el login-screen */
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
 
 .login-orb {
   position: absolute;
@@ -3785,7 +3794,7 @@ input:checked + .switch-track-video { background: #3B82F6; }
   letter-spacing: .3px;
   background: var(--bg);
   border-top: 1px solid var(--border);
-  z-index: 10;
+  z-index: 50;   /* sobre los modales no, pero sobre el contenido sí */
 }
 .app-version-footer span {
   font-weight: 600;
