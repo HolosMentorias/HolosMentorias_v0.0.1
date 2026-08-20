@@ -3700,6 +3700,8 @@ async function handleImportFile(file) {
       $('import-step-1').appendChild(infoEl);
     }
 
+    await buildImportPreview();
+
   } catch (e) {
     console.error('handleImportFile:', e);
     err.textContent = 'Error al leer el archivo: ' + e.message;
