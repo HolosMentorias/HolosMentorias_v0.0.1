@@ -557,7 +557,7 @@ async function bootstrapSession() {
   // Cargar perfil del usuario
   const { data: prof, error } = await db
     .from('profiles')
-    .select('id,email,rol,nombre,apellido,avatar_url,activo,puede_ver_estadisticas,mensaje_bienvenida,estado_mentor')
+    .select('id,email,rol,nombre,apellido,avatar_url,activo,puede_ver_estadisticas,mensaje_bienvenida,estado_mentor,color_mentor')
     .eq('id', session.user.id)
     .single();
 
@@ -861,8 +861,11 @@ function renderMentorCard(a) {
   const alerta = dias !== null && dias > 14;
   const eliminado = !!a.eliminado;
   const nivel = getNivelLabel(a);
+  // El color es el del mentor que está logueado (sus alumnos siempre tienen su color)
+  const myColor = state.profile.color_mentor;
+  const cardBg = (!eliminado && myColor) ? `style="background:${myColor}55;border-top:3px solid ${myColor}"` : '';
   return `
-    <article class="alumno-card alumno-mentor-card ${eliminado ? 'is-eliminado' : ''}" data-id="${a.id}">
+    <article class="alumno-card alumno-mentor-card ${eliminado ? 'is-eliminado' : ''}" data-id="${a.id}" ${cardBg}>
       ${alerta && !eliminado ? `<div class="card-alerta-banner">⚠️ Sin contacto hace ${dias} día${dias === 1 ? '' : 's'}</div>` : ''}
       <div class="card-top-row">
         <div class="card-top-info">
@@ -934,7 +937,7 @@ async function loadAdminAlumnos() {
   // Cargamos alumnos + perfiles de mentores en paralelo
   const [alRes, mRes] = await Promise.all([
     db.from('alumnos').select('*').order('created_at', { ascending: false }),
-    db.from('profiles').select('id,nombre,apellido,email').eq('rol','mentor').eq('activo', true)
+    db.from('profiles').select('id,nombre,apellido,email,color_mentor').eq('rol','mentor').eq('activo', true)
   ]);
 
   if (alRes.error) { toast('Error al cargar alumnos','error'); return; }
@@ -1047,6 +1050,9 @@ function renderAdminAlumnos() {
     const alerta = dias !== null && dias > 14 && !eliminado && !a.baja;
     const elimClass = eliminado ? 'is-eliminado' : '';
     const nivel = getNivelLabel(a);
+    // Color de fondo del grupo del mentor (pastel suave)
+    const colorFondo = (!eliminado && m?.color_mentor) ? m.color_mentor + '55' : '';
+    const colorBorde = (!eliminado && m?.color_mentor) ? m.color_mentor : '';
 
     // Badge de estado — idéntico al mentor
     const badgeEstado = eliminado
@@ -1057,9 +1063,13 @@ function renderAdminAlumnos() {
           ? '<span class="card-badge-activa activa-si"><svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg> Activa</span>'
           : '<span class="card-badge-activa activa-no"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg> Inactiva</span>';
 
+    const cardStyle = colorFondo
+      ? `style="background:${colorFondo};border-top:3px solid ${colorBorde}"`
+      : '';
+
     if (state.adminAlumnoViewMode === 'list') {
       grid.insertAdjacentHTML('beforeend', `
-        <article class="alumno-card admin-alumno-card ${elimClass}" data-id="${a.id}">
+        <article class="alumno-card admin-alumno-card ${elimClass}" data-id="${a.id}" ${cardStyle}>
           <div style="display:flex;align-items:center;gap:6px">
             <div class="crecimiento-icon-mini">${getIconoCrecimiento(a)}</div>
             <div class="alumno-card-name">${escapeHtml(a.apellido)}, ${escapeHtml(a.nombre)}</div>
@@ -1071,7 +1081,7 @@ function renderAdminAlumnos() {
       `);
     } else {
       grid.insertAdjacentHTML('beforeend', `
-        <article class="alumno-card admin-alumno-card ${elimClass}" data-id="${a.id}">
+        <article class="alumno-card admin-alumno-card ${elimClass}" data-id="${a.id}" ${cardStyle}>
           ${alerta ? `<div class="card-alerta-banner">⚠️ Sin contacto hace ${dias} día${dias === 1 ? '' : 's'}</div>` : ''}
           <div class="card-top-row">
             <div class="card-top-info">
@@ -1376,18 +1386,54 @@ $('btn-restaurar-alumno').onclick = async () => {
 async function loadAdminMentores() {
   const [mRes, aRes] = await Promise.all([
     db.from('profiles')
-      .select('id,nombre,apellido,email,avatar_url,activo,estado_mentor')
+      .select('id,nombre,apellido,email,avatar_url,activo,estado_mentor,color_mentor')
       .eq('rol','mentor')
       .order('created_at', { ascending: false }),
-    db.from('alumnos').select('id, mentor_id, baja')
+    db.from('alumnos').select('id, mentor_id, baja, eliminado')
   ]);
 
   if (mRes.error) { toast('Error al cargar mentores','error'); return; }
   state.adminMentores = mRes.data || [];
 
+  // Auto-asignar colores a mentores que no tienen uno todavía
+  await autoAsignarColoresMentores(state.adminMentores);
+
   const counts = new Map();
   (aRes.data || []).forEach(a => {
-    if (!a.mentor_id || a.baja) return;
+    if (!a.mentor_id || a.baja || a.eliminado) return;
+    counts.set(a.mentor_id, (counts.get(a.mentor_id) || 0) + 1);
+  });
+
+  renderAdminMentores(counts);
+}
+
+// Asigna colores pasteles a los mentores que aún no tienen uno
+// Los asigna en orden, sin repetir con los ya usados
+async function autoAsignarColoresMentores(mentores) {
+  const PALETA = [
+    '#FFD6D6','#FFE4B5','#FFFACD','#D4EDDA','#D6EAF8',
+    '#E8DAEF','#FDEBD0','#D5F5E3','#FADBD8','#DCE4F0',
+    '#A9DFBF','#AED6F1','#F9E79F','#F5CBA7','#C9DFEC'
+  ];
+  const sinColor = mentores.filter(m => !m.color_mentor);
+  if (!sinColor.length) return;
+
+  const usados = new Set(mentores.filter(m => m.color_mentor).map(m => m.color_mentor));
+  const disponibles = PALETA.filter(c => !usados.has(c));
+
+  for (let i = 0; i < sinColor.length; i++) {
+    const color = disponibles[i % PALETA.length] || PALETA[i % PALETA.length];
+    const m = sinColor[i];
+    const { error } = await db.from('profiles').update({ color_mentor: color }).eq('id', m.id);
+    if (!error) {
+      m.color_mentor = color;
+      usados.add(color);
+    }
+  }
+
+  const counts = new Map();
+  (aRes.data || []).forEach(a => {
+    if (!a.mentor_id || a.baja || a.eliminado) return;
     counts.set(a.mentor_id, (counts.get(a.mentor_id) || 0) + 1);
   });
 
@@ -1413,11 +1459,11 @@ function renderAdminMentores(counts) {
   for (const m of list) {
     const count  = counts.get(m.id) || 0;
     const estado = m.estado_mentor || 'activo';
+    const color  = m.color_mentor || '#E8E8E8';
     const avatarHtml = m.avatar_url
       ? `<img class="mentor-avatar" src="${escapeHtml(m.avatar_url)}" alt="" />`
-      : `<div class="mentor-avatar-placeholder">${escapeHtml(initials(m))}</div>`;
+      : `<div class="mentor-avatar-placeholder" style="background:${color}">${escapeHtml(initials(m))}</div>`;
 
-    // Badge de estado
     const estadoBadge =
       estado === 'pausado'
         ? '<span class="mentor-estado-badge estado-pausado">⏸ Pausado</span>'
@@ -1425,7 +1471,6 @@ function renderAdminMentores(counts) {
           ? '<span class="mentor-estado-badge estado-bloqueado">🚫 Bloqueado</span>'
           : '<span class="mentor-estado-badge estado-activo">● Activo</span>';
 
-    // Botones de acción según estado actual
     const btnPausa = estado === 'pausado'
       ? `<button class="btn-estado-mentor btn-reactivar" data-mentor="${m.id}" data-nuevo="activo">Reactivar</button>`
       : `<button class="btn-estado-mentor btn-pausar" data-mentor="${m.id}" data-nuevo="pausado">Pausar</button>`;
@@ -1434,10 +1479,14 @@ function renderAdminMentores(counts) {
       : `<button class="btn-estado-mentor btn-bloquear" data-mentor="${m.id}" data-nuevo="bloqueado">Bloquear</button>`;
 
     grid.insertAdjacentHTML('beforeend', `
-      <article class="mentor-card ${estado !== 'activo' ? 'mentor-card-inactiva' : ''}" data-id="${m.id}">
+      <article class="mentor-card ${estado !== 'activo' ? 'mentor-card-inactiva' : ''}" data-id="${m.id}"
+               style="border-top: 4px solid ${color}">
         <div class="mentor-card-top">
           ${avatarHtml}
-          ${estadoBadge}
+          <div style="display:flex;align-items:center;gap:6px">
+            ${estadoBadge}
+            <span class="mentor-color-dot" style="background:${color}" title="Color del grupo"></span>
+          </div>
         </div>
         <div class="mentor-card-name">${escapeHtml(fullName(m))}</div>
         <div class="mentor-card-email">${escapeHtml(m.email)}</div>
@@ -1445,7 +1494,12 @@ function renderAdminMentores(counts) {
           <div><strong>${count}</strong>alumnos</div>
         </div>
         <div class="mentor-card-actions">
-          <button class="btn-secondary btn-pdf-mentor" data-mentor="${m.id}" style="flex:1">PDF</button>
+          <button class="btn-asignar-grupo" data-mentor="${m.id}" data-nombre="${escapeHtml(fullName(m))}" data-color="${color}">
+            👥 Asignar grupo
+          </button>
+        </div>
+        <div class="mentor-card-actions" style="margin-top:4px">
+          <button class="btn-secondary btn-pdf-mentor" data-mentor="${m.id}" style="flex:1;font-size:11px">PDF</button>
           ${btnPausa}
           ${btnBloqueo}
         </div>
@@ -1461,6 +1515,12 @@ function renderAdminMentores(counts) {
     btn.onclick = (e) => {
       e.stopPropagation();
       cambiarEstadoMentor(btn.dataset.mentor, btn.dataset.nuevo);
+    };
+  });
+  $$('.btn-asignar-grupo', grid).forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      abrirAsignarGrupo(btn.dataset.mentor, btn.dataset.nombre, btn.dataset.color);
     };
   });
 }
@@ -3524,6 +3584,231 @@ $('config-msg-save').onclick = async () => {
   setTimeout(() => $('modal-config-msg').classList.add('hidden'), 1500);
   toast('Mensaje de bienvenida actualizado ✓');
 };
+
+/* ═══════════════════════════════════════════════════════════════
+   ASIGNACIÓN DE GRUPO MENTOR
+   El admin selecciona alumnos para un mentor específico.
+   Los alumnos ya asignados a otro mentor son visibles pero
+   aparecen en una sección diferente con aviso.
+═══════════════════════════════════════════════════════════════ */
+
+const grupoState = {
+  mentorId:   null,
+  mentorName: null,
+  color:      null,
+  todos:      [],        // todos los alumnos activos
+  seleccionados: new Set(), // ids de alumnos seleccionados
+};
+
+async function abrirAsignarGrupo(mentorId, mentorName, color) {
+  grupoState.mentorId   = mentorId;
+  grupoState.mentorName = mentorName;
+  grupoState.color      = color;
+  grupoState.seleccionados = new Set();
+
+  // Header con color del mentor
+  const header = $('grupo-modal-header');
+  header.style.background = `linear-gradient(135deg, ${color}99, ${color}44)`;
+
+  const av = $('grupo-avatar');
+  av.style.background = color;
+  av.textContent = mentorName.split(' ').map(p => p[0]).join('').slice(0,2).toUpperCase();
+
+  $('grupo-mentor-name').textContent = mentorName;
+  $('grupo-color-badge').textContent = `GRUPO DE MENTOR · ${mentorName.split(' ')[0].toUpperCase()}`;
+  $('grupo-color-badge').style.background = `${color}99`;
+
+  // Mostrar paso 1
+  $('grupo-step-1').classList.remove('hidden');
+  $('grupo-step-2').classList.add('hidden');
+  $('grupo-search').value = '';
+  $('grupo-alumno-list').innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Cargando alumnos...</p></div>';
+  $('modal-asignar-grupo').classList.remove('hidden');
+
+  // Cargar todos los alumnos activos
+  const { data, error } = await db.from('alumnos')
+    .select('id, nombre, apellido, numero_alumno, comision, mentor_id')
+    .eq('baja', false)
+    .eq('eliminado', false)
+    .order('apellido');
+
+  if (error) { toast('Error al cargar alumnos','error'); return; }
+  grupoState.todos = data || [];
+
+  // Pre-seleccionar los alumnos ya asignados a ESTE mentor
+  grupoState.todos
+    .filter(a => a.mentor_id === mentorId)
+    .forEach(a => grupoState.seleccionados.add(a.id));
+
+  renderGrupoList();
+}
+
+function renderGrupoList(filtro = '') {
+  const list = $('grupo-alumno-list');
+  list.innerHTML = '';
+
+  // Separar en 3 grupos
+  const mios       = grupoState.todos.filter(a => a.mentor_id === grupoState.mentorId);
+  const libres     = grupoState.todos.filter(a => !a.mentor_id);
+  const deOtro     = grupoState.todos.filter(a => a.mentor_id && a.mentor_id !== grupoState.mentorId);
+
+  // Mapa de colores de otros mentores para mostrar su grupo
+  const mentorColorMap = new Map(state.adminMentores.map(m => [m.id, { color: m.color_mentor, name: fullName(m) }]));
+
+  const renderItem = (a, tipo) => {
+    const nombre = `${a.apellido}, ${a.nombre}`;
+    if (filtro && !nombre.toLowerCase().includes(filtro.toLowerCase())) return '';
+    const checked = grupoState.seleccionados.has(a.id) ? 'checked' : '';
+    const esOtro  = tipo === 'otro';
+    const otroMentor = esOtro ? mentorColorMap.get(a.mentor_id) : null;
+    const tag = tipo === 'mio'
+      ? '<span class="grupo-alumno-tag tag-mine">Mi grupo</span>'
+      : tipo === 'libre'
+        ? '<span class="grupo-alumno-tag tag-free">Sin asignar</span>'
+        : `<span class="grupo-alumno-tag tag-otro" style="background:${otroMentor?.color || '#FDF3DC'}44">${otroMentor?.name.split(' ')[0] || 'Otro'}</span>`;
+    return `
+      <div class="grupo-alumno-item ${checked} ${esOtro ? 'is-otro' : ''}" data-id="${a.id}">
+        <div class="grupo-checkbox"></div>
+        <div class="grupo-alumno-info">
+          <div class="grupo-alumno-name">${escapeHtml(nombre)}</div>
+          ${a.comision ? `<div class="grupo-alumno-sub">${escapeHtml(a.comision)}</div>` : ''}
+        </div>
+        ${tag}
+      </div>`;
+  };
+
+  const secciones = [
+    { label: `✅ Ya en este grupo (${mios.length})`, items: mios, tipo: 'mio' },
+    { label: `⚪ Sin asignar (${libres.length})`, items: libres, tipo: 'libre' },
+    { label: `🔶 Asignados a otro mentor (${deOtro.length})`, items: deOtro, tipo: 'otro' },
+  ];
+
+  let hayAlgo = false;
+  for (const sec of secciones) {
+    const html = sec.items.map(a => renderItem(a, sec.tipo)).join('');
+    if (!html && filtro) continue;
+    if (!sec.items.length && !filtro) {
+      list.insertAdjacentHTML('beforeend', `<div class="grupo-section-label">${sec.label}</div>`);
+      continue;
+    }
+    list.insertAdjacentHTML('beforeend', `<div class="grupo-section-label">${sec.label}</div>${html}`);
+    hayAlgo = true;
+  }
+
+  if (!hayAlgo && filtro) {
+    list.innerHTML = '<div class="empty-state" style="padding:24px"><span>🔍</span><p>Sin resultados para esa búsqueda.</p></div>';
+  }
+
+  // Bindings de checkboxes
+  $$('.grupo-alumno-item', list).forEach(el => {
+    el.onclick = () => {
+      const id = parseInt(el.dataset.id);
+      if (grupoState.seleccionados.has(id)) {
+        grupoState.seleccionados.delete(id);
+        el.classList.remove('checked');
+      } else {
+        grupoState.seleccionados.add(id);
+        el.classList.add('checked');
+      }
+      actualizarContadorGrupo();
+    };
+  });
+
+  actualizarContadorGrupo();
+}
+
+function actualizarContadorGrupo() {
+  const n = grupoState.seleccionados.size;
+  $('grupo-counter').textContent = `${n} alumno${n !== 1 ? 's' : ''} seleccionado${n !== 1 ? 's' : ''}`;
+}
+
+// Búsqueda en tiempo real
+$('grupo-search').addEventListener('input', e => {
+  renderGrupoList(e.target.value);
+});
+
+// Botón Aplicar → paso de confirmación
+$('grupo-aplicar').onclick = () => {
+  const sel = [...grupoState.seleccionados];
+  const prev = grupoState.todos.filter(a => a.mentor_id === grupoState.mentorId).map(a => a.id);
+
+  const agregados    = sel.filter(id => !prev.includes(id));
+  const quitados     = prev.filter(id => !sel.includes(id));
+  const reasignados  = agregados.filter(id => {
+    const a = grupoState.todos.find(x => x.id === id);
+    return a && a.mentor_id && a.mentor_id !== grupoState.mentorId;
+  });
+
+  const color = grupoState.color;
+  $('grupo-confirm-content').innerHTML = `
+    <div class="grupo-confirm-icon">👥</div>
+    <p class="grupo-confirm-title">¿Confirmar asignación?</p>
+    <p class="grupo-confirm-sub">El grupo quedará asignado como:</p>
+    <span class="grupo-confirm-name" style="background:${color}77;color:#2C2417">
+      GRUPO DE MENTOR · ${escapeHtml(grupoState.mentorName.toUpperCase())}
+    </span>
+    <div class="grupo-confirm-stats">
+      <div class="grupo-confirm-stat"><strong>${sel.length}</strong>total asignados</div>
+      ${agregados.length ? `<div class="grupo-confirm-stat"><strong>+${agregados.length}</strong>se agregan</div>` : ''}
+      ${quitados.length  ? `<div class="grupo-confirm-stat"><strong>−${quitados.length}</strong>se quitan</div>` : ''}
+      ${reasignados.length ? `<div class="grupo-confirm-stat"><strong>${reasignados.length}</strong>reasignados de otro mentor</div>` : ''}
+    </div>
+    ${reasignados.length ? `<p style="font-size:12px;color:#C4825A;margin-top:12px">⚠️ ${reasignados.length} alumno${reasignados.length > 1 ? 's' : ''} van a ser reasignados desde otro mentor.</p>` : ''}
+  `;
+
+  $('grupo-step-1').classList.add('hidden');
+  $('grupo-step-2').classList.remove('hidden');
+};
+
+$('grupo-confirm-back').onclick = () => {
+  $('grupo-step-2').classList.add('hidden');
+  $('grupo-step-1').classList.remove('hidden');
+};
+
+// Ejecutar la asignación
+$('grupo-confirm-ok').onclick = async () => {
+  $('grupo-confirm-ok').disabled = true;
+  $('grupo-confirm-ok').textContent = 'Aplicando...';
+
+  const selArr = [...grupoState.seleccionados];
+  const prev   = grupoState.todos.filter(a => a.mentor_id === grupoState.mentorId).map(a => a.id);
+  const quitar = prev.filter(id => !selArr.includes(id));
+
+  let errores = 0;
+
+  // Asignar los seleccionados a este mentor
+  if (selArr.length) {
+    const { error } = await db.from('alumnos')
+      .update({ mentor_id: grupoState.mentorId })
+      .in('id', selArr);
+    if (error) { console.error('asignar:', error); errores++; }
+  }
+
+  // Quitar de este mentor los que se deseleccionaron
+  if (quitar.length) {
+    const { error } = await db.from('alumnos')
+      .update({ mentor_id: null })
+      .in('id', quitar);
+    if (error) { console.error('quitar:', error); errores++; }
+  }
+
+  $('grupo-confirm-ok').disabled = false;
+  $('grupo-confirm-ok').textContent = 'Confirmar';
+  $('modal-asignar-grupo').classList.add('hidden');
+
+  if (errores) {
+    toast('Algunos cambios no se pudieron aplicar', 'error');
+  } else {
+    toast(`✓ Grupo de ${escapeHtml(grupoState.mentorName)} actualizado`);
+  }
+
+  // Refrescar datos
+  loadAdminAlumnos();
+  loadAdminMentores();
+};
+
+$('grupo-close').onclick  = () => $('modal-asignar-grupo').classList.add('hidden');
+$('grupo-cancel').onclick = () => $('modal-asignar-grupo').classList.add('hidden');
 
 /* ═══════════════════════════════════════════════════════════════
    IMPORTACIÓN DE ALUMNOS DESDE EXCEL (v0.0.2)

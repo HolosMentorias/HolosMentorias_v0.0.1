@@ -3981,3 +3981,252 @@ input:checked + .switch-track-video { background: #3B82F6; }
   .import-mode-options { gap: 6px; }
 }
 
+
+
+/* ═══════════════════════════════════════════════════════════════
+   HOLOS · Asignación de grupo mentor + colores en tarjetas
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Modal de asignación de grupo ── */
+.modal-card-grupo {
+  max-width: 580px;
+  width: 100%;
+  max-height: 90dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-card-grupo .modal-body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 0;
+}
+
+/* Header con color del mentor */
+.grupo-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.grupo-header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+.grupo-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 18px;
+  flex-shrink: 0;
+  border: 3px solid rgba(255,255,255,.6);
+  box-shadow: var(--shadow-sm);
+}
+.grupo-header-info h2 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+.grupo-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.08);
+  color: var(--text-secondary);
+}
+
+/* Barra de búsqueda + contador */
+.grupo-search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.grupo-counter {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-dark);
+  white-space: nowrap;
+  background: var(--accent-light);
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+/* Lista de alumnos con checkbox */
+.grupo-alumno-list {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.grupo-section-label {
+  padding: 8px 20px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.grupo-alumno-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 20px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: var(--transition);
+  user-select: none;
+}
+.grupo-alumno-item:hover { background: var(--bg-input); }
+.grupo-alumno-item.is-otro { opacity: .7; }
+.grupo-alumno-item.hidden-by-search { display: none; }
+
+.grupo-checkbox {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+  background: var(--bg-card);
+}
+.grupo-alumno-item.checked .grupo-checkbox {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.grupo-alumno-item.checked .grupo-checkbox::after {
+  content: '';
+  width: 10px; height: 6px;
+  border-left: 2px solid white;
+  border-bottom: 2px solid white;
+  transform: rotate(-45deg) translateY(-1px);
+  display: block;
+}
+.grupo-alumno-info { flex: 1; min-width: 0; }
+.grupo-alumno-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.grupo-alumno-sub {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+.grupo-alumno-tag {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.tag-mine    { background: var(--accent-light); color: var(--accent-dark); }
+.tag-free    { background: var(--bg-input); color: var(--text-muted); border: 1px solid var(--border); }
+.tag-otro    { background: #FDF3DC; color: #8B6F00; }
+
+/* Confirmación */
+.grupo-confirm-content {
+  text-align: center;
+  padding: 8px 0;
+}
+.grupo-confirm-icon { font-size: 48px; margin-bottom: 12px; }
+.grupo-confirm-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+}
+.grupo-confirm-sub {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+.grupo-confirm-name {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 16px;
+}
+.grupo-confirm-stats {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.grupo-confirm-stat {
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.grupo-confirm-stat strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--text-primary);
+}
+
+/* ── Tarjeta de alumno con color de grupo ── */
+.alumno-card.has-grupo-color {
+  border-left: 4px solid transparent;
+  transition: background-color .3s ease, border-color .3s ease;
+}
+/* El color de fondo se aplica vía inline style desde JS */
+
+/* Dot de color en la tarjeta del mentor */
+.mentor-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 2px solid rgba(255,255,255,.7);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.1);
+  flex-shrink: 0;
+}
+
+/* Botón asignar grupo en la tarjeta del mentor */
+.btn-asignar-grupo {
+  flex: 2;
+  font-size: 11px;
+  padding: 7px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-weight: 600;
+  background: var(--accent-light);
+  border: 1px solid var(--accent);
+  color: var(--accent-dark);
+  transition: var(--transition);
+}
+.btn-asignar-grupo:hover { background: var(--accent); color: white; }
+

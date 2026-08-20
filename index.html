@@ -1115,6 +1115,64 @@
     </div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════
+       MODAL · Asignar grupo mentor
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay hidden" id="modal-asignar-grupo">
+    <div class="modal-card modal-card-grupo">
+
+      <!-- PASO 1: Seleccionar alumnos -->
+      <div id="grupo-step-1">
+        <div class="modal-header grupo-header" id="grupo-modal-header">
+          <div class="grupo-header-info">
+            <div class="grupo-avatar" id="grupo-avatar"></div>
+            <div>
+              <h2 id="grupo-mentor-name">—</h2>
+              <span class="grupo-badge" id="grupo-color-badge">Grupo de Mentor</span>
+            </div>
+          </div>
+          <button class="btn-icon" id="grupo-close" aria-label="Cerrar">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <div class="modal-body" style="padding-top:0">
+          <div class="grupo-search-row">
+            <div class="search-wrap" style="flex:1">
+              <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="grupo-search" placeholder="Buscar alumno..." />
+            </div>
+            <span class="grupo-counter" id="grupo-counter">0 seleccionados</span>
+          </div>
+
+          <div class="grupo-alumno-list" id="grupo-alumno-list">
+            <div class="loading-state"><div class="spinner"></div><p>Cargando...</p></div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-secondary" id="grupo-cancel">Cancelar</button>
+          <button class="btn-primary" id="grupo-aplicar">Aplicar asignación</button>
+        </div>
+      </div>
+
+      <!-- PASO 2: Confirmación -->
+      <div id="grupo-step-2" class="hidden">
+        <div class="modal-header">
+          <h2>Confirmar asignación</h2>
+        </div>
+        <div class="modal-body">
+          <div class="grupo-confirm-content" id="grupo-confirm-content"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" id="grupo-confirm-back">← Volver</button>
+          <button class="btn-primary" id="grupo-confirm-ok">Confirmar</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Toast -->
   <div class="toast hidden" id="toast"></div>
 
