@@ -74,12 +74,6 @@ body {
 /* ══════════════════════════════════════
    LOGIN
 ══════════════════════════════════════ */
-/*
- * El login-screen es un flex container que cubre toda la pantalla.
- * display:none / display:flex se controla con la clase .active.
- * NO usamos position:fixed en los hijos para evitar clipping
- * en Chromium cuando el padre tiene overflow:hidden.
- */
 #login-screen {
   background: linear-gradient(145deg, #2C2417 0%, #3D3425 50%, #1E3A1A 100%) !important;
   position: fixed !important;
@@ -87,12 +81,14 @@ body {
   overflow-y: auto !important;
   overflow-x: hidden !important;
   display: none !important;
-  /* NO overflow:hidden aquí — necesitamos que los hijos se centren bien */
 }
+/* Flex row: justify-content centra horizontalmente */
 #login-screen.active {
   display: flex !important;
+  flex-direction: row !important;
   align-items: flex-start !important;
   justify-content: center !important;
+  padding: 40px 24px !important;
   animation: fadeIn .25s ease both;
 }
 .login-bg {
@@ -119,21 +115,16 @@ body {
   bottom: -60px; left: -60px;
 }
 /*
- * El centrado definitivo:
- * - #login-screen es flex con justify-content:center
- *   → centra .login-panels horizontalmente SIN margin:auto
- * - .login-panels usa margin-top:auto y margin-bottom:auto
- *   para centrar verticalmente dentro del scroll container
- * - SIN position:fixed en el hijo (evita el clipping de Chromium)
+ * ANCHO FIJO — sin width:100% que confunde al algoritmo flex.
+ * 400px fijo + max-width como fallback para pantallas pequeñas.
+ * flex-shrink:0 evita que se achique y flex-grow:0 evita que crezca.
  */
 .login-panels {
+  width: 400px;
+  max-width: calc(100vw - 48px);
+  flex: 0 0 auto;
   position: relative;
   z-index: 1;
-  width: 100%;
-  max-width: 400px;
-  flex-shrink: 0;
-  margin: auto 0;          /* centrado vertical */
-  padding: 24px 24px;
 }
 .login-card {
   background: rgba(250,247,242,.97);
