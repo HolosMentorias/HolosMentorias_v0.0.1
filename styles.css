@@ -74,6 +74,13 @@ body {
 /* ══════════════════════════════════════
    LOGIN
 ══════════════════════════════════════ */
+/*
+ * ESTRATEGIA DE CENTRADO DUAL:
+ * 1) El flex container centra con align-items:center (funciona si .login-panels está)
+ * 2) .login-card tiene max-width:400px + margin:0 auto (funciona SIEMPRE como fallback)
+ * De esta forma el login se centra independientemente de si el HTML tiene o no 
+ * el wrapper .login-panels.
+ */
 #login-screen {
   background: linear-gradient(145deg, #2C2417 0%, #3D3425 50%, #1E3A1A 100%) !important;
   position: fixed !important;
@@ -113,8 +120,7 @@ body {
   background: #C4825A;
   bottom: -60px; left: -60px;
 }
-/* wrapper opcional — si está presente ayuda, si no el login-card
-   se centra solo gracias a su propio max-width + margin:0 auto */
+/* Wrapper opcional — si está en el HTML ayuda */
 .login-panels {
   width: 100%;
   max-width: 400px;
@@ -122,8 +128,14 @@ body {
   position: relative;
   z-index: 1;
 }
-/* La card se centra SOLA: max-width + margin:0 auto es el fallback
-   que funciona incluso sin el wrapper login-panels */
+/*
+ * La card se centra SOLA por su propio max-width + margin:0 auto.
+ * Esto funciona:
+ *   a) Con .login-panels: la card es hijo de un bloque de 400px (ya centrado)
+ *   b) Sin .login-panels: la card es hijo directo del flex container de 100vw,
+ *      margin:0 auto la centra igualmente porque en flex-column el margen
+ *      horizontal auto funciona como en block layout.
+ */
 .login-card {
   background: rgba(250,247,242,.97);
   border-radius: var(--radius-xl);
@@ -4426,7 +4438,7 @@ input:checked + .switch-track-video { background: #3B82F6; }
   transform: rotate(-45deg) translateY(-1px);
   display: block;
 }
-/* Resaltar tarjetas seleccionadas */
+/* Resaltar tarjetas seleccionadas d */
 .bulk-mode .alumno-card.bulk-selected {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
@@ -4522,4 +4534,3 @@ input:checked + .switch-track-video { background: #3B82F6; }
   transition: var(--transition);
 }
 .btn-bulk-cancel:hover { background: rgba(255,255,255,.1); color: white; }
-
