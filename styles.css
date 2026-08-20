@@ -72,21 +72,23 @@ body {
 }
 
 /* ══════════════════════════════════════
-   LOGIN — centrado a prueba de balas
+   LOGIN
 ══════════════════════════════════════ */
+/* El login-screen es una pantalla fixed que cubre todo */
 #login-screen {
   background: linear-gradient(145deg, #2C2417 0%, #3D3425 50%, #1E3A1A 100%) !important;
   position: fixed !important;
   inset: 0 !important;
   overflow-y: auto !important;
 }
+/* Cuando está activo: CSS Grid centra el único hijo visible */
 #login-screen.active {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  padding: 40px 24px !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 24px !important;
   animation: fadeIn .25s ease both;
 }
+/* Los orbs flotan detrás, fuera del grid flow */
 .login-bg {
   position: fixed;
   inset: 0;
@@ -110,11 +112,10 @@ body {
   background: #C4825A;
   bottom: -60px; left: -60px;
 }
-/* Contenedor único: margin:auto lo centra en el flex-column */
+/* Contenedor de paneles: el único grid item no-absolute */
 .login-panels {
   width: 100%;
   max-width: 400px;
-  margin: auto;
   position: relative;
   z-index: 1;
 }
