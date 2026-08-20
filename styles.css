@@ -4013,35 +4013,43 @@ input:checked + .switch-track-video { background: #3B82F6; }
 .modal-card-grupo {
   max-width: 580px;
   width: 100%;
-  height: 90dvh;           /* altura fija para que el modal tenga límite */
+  height: 90dvh;
   max-height: 90dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+/* El wrapper del paso 1 también tiene que ser flex col */
+#grupo-step-1 {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
 }
 .modal-card-grupo .modal-body {
   flex: 1;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding: 0;              /* sin padding: lo maneja cada sub-sección */
-  min-height: 0;           /* clave para que flex no expanda sin límite */
+  padding: 0;
+  min-height: 0;
 }
-
-/* El header con buscador es fijo, la lista scrollea */
+/* El header con buscador no se achica */
 .grupo-search-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 20px;
+  gap: 8px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
-  flex-shrink: 0;          /* nunca se achica */
+  flex-shrink: 0;
 }
+/* LA LISTA: ésta es la única parte que scrollea */
 .grupo-alumno-list {
   flex: 1;
-  overflow-y: auto;        /* ESTA es la parte que scrollea */
+  overflow-y: scroll;       /* forzar scroll siempre visible */
   -webkit-overflow-scrolling: touch;
-  min-height: 0;           /* clave en flexbox para el scroll */
+  min-height: 0;
 }
 .grupo-header {
   padding: 16px 20px;
