@@ -1718,18 +1718,32 @@ input:checked + .switch-track-video { background: #3B82F6; }
 
 /* ── NAV TABS (por rol) ── */
 .app-nav {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 12px;
   background: var(--bg-card);
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   min-height: 44px;
+  display: flex;
+  justify-content: center;  /* centrar el nav-inner */
 }
 .app-nav::-webkit-scrollbar { display: none; }
+
+/* nav-inner: mismo ancho máximo y padding que el header-inner */
+.nav-inner {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  max-width: 1200px;
+  padding: 0 12px;
+}
+@media (min-width: 600px) {
+  .nav-inner { padding: 0 20px; }
+}
+@media (min-width: 900px) {
+  .nav-inner { padding: 0 32px; }
+}
 
 /* Hamburguesa — solo visible en mobile */
 .nav-hamburger {
