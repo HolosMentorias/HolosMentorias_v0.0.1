@@ -3709,3 +3709,268 @@ input:checked + .switch-track-video { background: #3B82F6; }
   }
 }
 
+
+
+/* ═══════════════════════════════════════════════════════════════
+   HOLOS v0.0.2 · Importación Excel + footer de versión
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Footer de versión ── */
+.app-version-footer {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 16px 0 24px;
+  letter-spacing: .3px;
+}
+.app-version-footer span {
+  font-weight: 600;
+  color: var(--accent-dark);
+}
+
+/* ── Botón Importar Excel ── */
+.btn-import {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--accent);
+  color: var(--accent-dark);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+.btn-import:hover {
+  background: var(--accent-light);
+}
+
+/* ── Modal de importación: dropzone ── */
+.import-dropzone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: 36px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition);
+  background: var(--bg-input);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.import-dropzone:hover,
+.import-dropzone.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+.import-dropzone-text {
+  font-size: 15px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* ── Preview: stats ── */
+.import-preview-header {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-bottom: 16px;
+  padding: 14px;
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+}
+.import-preview-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.import-stat-num {
+  font-family: var(--font-display);
+  font-size: 28px;
+  color: var(--text-primary);
+  line-height: 1;
+}
+.import-stat-num.accent { color: var(--accent-dark); }
+.import-stat-num.warn   { color: #C4825A; }
+.import-stat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+
+/* ── Modo de importación (pisar vs agregar) ── */
+.import-mode-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  margin: 0 0 10px;
+}
+.import-mode-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.import-mode-opt { cursor: pointer; }
+.import-mode-opt input[type="radio"] { display: none; }
+.import-mode-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  transition: var(--transition);
+}
+.import-mode-opt input:checked + .import-mode-card {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+.import-mode-icon { font-size: 22px; flex-shrink: 0; line-height: 1.2; }
+.import-mode-card strong { font-size: 14px; color: var(--text-primary); display: block; margin-bottom: 3px; }
+.import-mode-card p { font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.4; }
+
+/* ── Tabla de preview ── */
+.import-table-wrap {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.import-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.import-table th {
+  background: var(--bg-input);
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  font-size: 10px;
+  position: sticky;
+  top: 0;
+  border-bottom: 1px solid var(--border);
+}
+.import-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.import-table tr:last-child td { border-bottom: none; }
+.import-table tr.row-new td   { background: #F0FBF0; }
+.import-table tr.row-exists td { background: #FDF3DC; }
+.import-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+.import-badge-new    { background: var(--accent-light); color: var(--accent-dark); }
+.import-badge-exists { background: #FDF3DC; color: #8B6F00; }
+
+/* ── Barra de progreso ── */
+.import-progress-wrap {
+  text-align: center;
+  padding: 24px 0;
+}
+.import-progress-wrap p { font-size: 14px; color: var(--text-secondary); margin: 0 0 16px; }
+.import-progress-bar-track {
+  height: 8px;
+  background: var(--bg-input);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.import-progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  width: 0%;
+  transition: width .3s ease;
+}
+
+/* ── Resultado final ── */
+.import-result {
+  text-align: center;
+  padding: 24px 0;
+}
+.import-result-icon { font-size: 48px; margin-bottom: 12px; }
+.import-result h3 { font-family: var(--font-display); font-size: 20px; color: var(--text-primary); margin: 0 0 8px; }
+.import-result p  { font-size: 14px; color: var(--text-secondary); margin: 0; }
+.import-result-stats {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+.import-result-stat {
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.import-result-stat strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--text-primary);
+}
+
+/* ── Campos nuevos en tarjetas ── */
+.alumno-card-comision {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.badge-situacion {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+.badge-numero {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+
+/* ── Import: mobile ── */
+@media (max-width: 599px) {
+  .import-preview-header { gap: 10px; }
+  .import-stat-num { font-size: 22px; }
+  .import-mode-options { gap: 6px; }
+}
+

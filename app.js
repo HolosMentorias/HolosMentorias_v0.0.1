@@ -868,6 +868,11 @@ function renderMentorCard(a) {
         <div class="card-top-info">
           <div class="alumno-card-name">${escapeHtml(a.nombre)} ${escapeHtml(a.apellido)}</div>
           ${a.telefono ? `<div class="card-telefono">📞 ${escapeHtml(a.telefono)}</div>` : ''}
+          <div class="alumno-card-comision">
+            ${a.numero_alumno ? `<span class="badge-numero">#${a.numero_alumno}</span>` : ''}
+            ${a.comision ? `<span>${escapeHtml(a.comision)}</span>` : ''}
+            ${a.situacion ? `<span class="badge-situacion">${escapeHtml(a.situacion)}</span>` : ''}
+          </div>
           <div class="card-nivel-label ${nivel.cls}">${nivel.label}</div>
         </div>
         <div class="card-top-right">
@@ -1072,6 +1077,11 @@ function renderAdminAlumnos() {
             <div class="card-top-info">
               <div class="alumno-card-name">${escapeHtml(a.nombre)} ${escapeHtml(a.apellido)}</div>
               ${a.telefono ? `<div class="card-telefono">📞 ${escapeHtml(a.telefono)}</div>` : ''}
+              <div class="alumno-card-comision">
+                ${a.numero_alumno ? `<span class="badge-numero">#${a.numero_alumno}</span>` : ''}
+                ${a.comision ? `<span>${escapeHtml(a.comision)}</span>` : ''}
+                ${a.situacion ? `<span class="badge-situacion">${escapeHtml(a.situacion)}</span>` : ''}
+              </div>
               <div class="card-nivel-label ${nivel.cls}">${nivel.label}</div>
             </div>
             <div class="card-top-right">
@@ -1168,10 +1178,13 @@ function openAlumnoForm(alumnoId) {
       ? 'Alumno eliminado'
       : (isMentor ? 'Editar alumno' : 'Editar alumno');
 
-    $('form-nombre').value      = a.nombre || '';
-    $('form-apellido').value    = a.apellido || '';
-    $('form-telefono').value    = a.telefono || '';
-    $('form-email').value       = a.email || '';
+    $('form-nombre').value        = a.nombre || '';
+    $('form-apellido').value      = a.apellido || '';
+    $('form-numero-alumno').value = a.numero_alumno || '';
+    $('form-situacion').value     = a.situacion || '';
+    $('form-comision').value      = a.comision || '';
+    $('form-telefono').value      = a.telefono || '';
+    $('form-email').value         = a.email || '';
     $('form-fecha-primer').value= a.fecha_primer || '';
     $('form-fecha-ultimo').value= a.fecha_ultimo || '';
     $('form-respondio').value   = a.respondio || '';
@@ -1194,7 +1207,8 @@ function openAlumnoForm(alumnoId) {
     }
   } else {
     $('modal-title').textContent = 'Nuevo alumno';
-    ['form-nombre','form-apellido','form-telefono','form-email',
+    ['form-nombre','form-apellido','form-numero-alumno','form-situacion',
+     'form-comision','form-telefono','form-email',
      'form-fecha-primer','form-fecha-ultimo','form-respondio',
      'form-tipo-contacto','form-inquietudes','form-seguimiento']
       .forEach(id => $(id).value = '');
@@ -1220,17 +1234,20 @@ $('btn-save').onclick = async () => {
   const id = $('form-id').value || null;
 
   const payload = {
-    nombre:        $('form-nombre').value.trim(),
-    apellido:      $('form-apellido').value.trim(),
-    telefono:      $('form-telefono').value.trim() || null,
-    email:         $('form-email').value.trim()    || null,
-    fecha_primer:  $('form-fecha-primer').value || null,
-    fecha_ultimo:  $('form-fecha-ultimo').value || null,
-    respondio:     $('form-respondio').value      || null,
-    tipo_contacto: $('form-tipo-contacto').value  || null,
-    activa:        $('form-activa').checked,
-    inquietudes:   $('form-inquietudes').value    || null,
-    seguimiento:   $('form-seguimiento').value    || null,
+    nombre:          $('form-nombre').value.trim(),
+    apellido:        $('form-apellido').value.trim(),
+    numero_alumno:   parseInt($('form-numero-alumno').value) || null,
+    situacion:       $('form-situacion').value.trim()  || null,
+    comision:        $('form-comision').value.trim()   || null,
+    telefono:        $('form-telefono').value.trim()   || null,
+    email:           $('form-email').value.trim()      || null,
+    fecha_primer:    $('form-fecha-primer').value      || null,
+    fecha_ultimo:    $('form-fecha-ultimo').value      || null,
+    respondio:       $('form-respondio').value         || null,
+    tipo_contacto:   $('form-tipo-contacto').value     || null,
+    activa:          $('form-activa').checked,
+    inquietudes:     $('form-inquietudes').value       || null,
+    seguimiento:     $('form-seguimiento').value       || null,
   };
 
   if (!payload.nombre || !payload.apellido) {
@@ -3506,6 +3523,312 @@ $('config-msg-save').onclick = async () => {
   $('config-msg-ok').classList.remove('hidden');
   setTimeout(() => $('modal-config-msg').classList.add('hidden'), 1500);
   toast('Mensaje de bienvenida actualizado ✓');
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   IMPORTACIÓN DE ALUMNOS DESDE EXCEL (v0.0.2)
+
+   Flujo:
+   1. Admin selecciona / arrastra un .xlsx
+   2. SheetJS lo procesa client-side (sin subir nada al servidor)
+   3. Se consultan los numero_alumno existentes en BD
+   4. Se clasifica cada fila del Excel como "nuevo" o "existe"
+   5. Si hay existentes, se pregunta: pisar o agregar sólo faltantes
+   6. Se insertan/actualizan de a lotes de 50 con barra de progreso
+═══════════════════════════════════════════════════════════════ */
+
+// Estado local de la importación
+const importState = {
+  rows: [],        // filas parseadas del Excel [{numero, apellido, nombre, ...}]
+  existing: new Map(), // numero_alumno → id de alumno existente en BD
+  mode: 'merge',   // 'merge' | 'skip'
+};
+
+function openImportModal() {
+  // Reset al paso 1
+  $('import-step-1').classList.remove('hidden');
+  $('import-step-2').classList.add('hidden');
+  $('import-step-3').classList.add('hidden');
+  $('import-step-4').classList.add('hidden');
+  $('import-error').classList.add('hidden');
+  $('import-error').textContent = '';
+  $('import-confirm').classList.add('hidden');
+  $('import-done').classList.add('hidden');
+  $('import-change-file').classList.add('hidden');
+  $('import-cancel').classList.remove('hidden');
+  $('import-file-input').value = '';
+  importState.rows = [];
+  importState.existing = new Map();
+  $('modal-import').classList.remove('hidden');
+}
+
+$('btn-import-excel').onclick = () => openImportModal();
+$('import-close').onclick   = () => $('modal-import').classList.add('hidden');
+$('import-cancel').onclick  = () => $('modal-import').classList.add('hidden');
+$('import-change-file').onclick = () => openImportModal();
+
+// Dropzone click → abrir file picker
+$('import-dropzone').onclick = () => $('import-file-input').click();
+
+// Drag & drop
+$('import-dropzone').addEventListener('dragover', e => {
+  e.preventDefault();
+  $('import-dropzone').classList.add('drag-over');
+});
+$('import-dropzone').addEventListener('dragleave', () => {
+  $('import-dropzone').classList.remove('drag-over');
+});
+$('import-dropzone').addEventListener('drop', e => {
+  e.preventDefault();
+  $('import-dropzone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleImportFile(file);
+});
+
+$('import-file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (file) handleImportFile(file);
+});
+
+// Leer y parsear el Excel con SheetJS
+async function handleImportFile(file) {
+  const err = $('import-error');
+  err.classList.add('hidden');
+
+  if (!file.name.match(/\.(xlsx|xls)$/i)) {
+    err.textContent = 'El archivo debe ser .xlsx o .xls';
+    err.classList.remove('hidden'); return;
+  }
+
+  try {
+    const buf  = await file.arrayBuffer();
+    const wb   = XLSX.read(buf, { type: 'array' });
+    const ws   = wb.Sheets[wb.SheetNames[0]];
+    // La primera fila del Excel es un encabezado de título (Quinttos...),
+    // la segunda es la cabecera real (#, Apellido, etc.)
+    // Usamos defval:'' para que las celdas vacías sean strings vacíos
+    const raw  = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+    // Encontrar la fila que tiene '#' como primera celda → esa es la cabecera
+    const headerIdx = raw.findIndex(r =>
+      String(r[0]).trim() === '#' || String(r[0]).trim().toLowerCase() === '#'
+    );
+    if (headerIdx === -1) {
+      err.textContent = 'No se encontró la fila de cabecera con "#, Apellido, Nombre...". Verificá el formato del archivo.';
+      err.classList.remove('hidden'); return;
+    }
+
+    const headers = raw[headerIdx].map(h => String(h).trim().toLowerCase());
+    const dataRows = raw.slice(headerIdx + 1).filter(r => r[0] !== '' && r[0] !== null);
+
+    const col = (name) => {
+      const aliases = {
+        'numero':   ['#', 'numero', 'nro', 'n°', 'num'],
+        'apellido': ['apellido'],
+        'nombre':   ['nombre'],
+        'comision': ['comisión', 'comision'],
+        'situacion':['situación', 'situacion'],
+        'email':    ['mail', 'email', 'correo'],
+        'celular':  ['celular'],
+      };
+      const alts = aliases[name] || [name];
+      for (const alt of alts) {
+        const idx = headers.findIndex(h => h.includes(alt));
+        if (idx !== -1) return idx;
+      }
+      return -1;
+    };
+
+    const idx = {
+      numero:    col('numero'),
+      apellido:  col('apellido'),
+      nombre:    col('nombre'),
+      comision:  col('comision'),
+      situacion: col('situacion'),
+      email:     col('email'),
+      celular:   col('celular'),
+    };
+
+    // Parsear filas
+    importState.rows = dataRows.map(r => {
+      const celular = String(r[idx.celular] ?? '').replace(/^'/, '').trim(); // quitar el ' inicial que a veces pone Excel
+      const numero  = parseInt(r[idx.numero]);
+      return {
+        numero_alumno: isNaN(numero) ? null : numero,
+        apellido:      String(r[idx.apellido] ?? '').trim(),
+        nombre:        String(r[idx.nombre]   ?? '').trim(),
+        comision:      idx.comision  >= 0 ? String(r[idx.comision]  ?? '').trim() : '',
+        situacion:     idx.situacion >= 0 ? String(r[idx.situacion] ?? '').trim() : '',
+        email:         idx.email     >= 0 ? String(r[idx.email]     ?? '').trim() : '',
+        telefono:      celular,
+      };
+    }).filter(r => r.apellido || r.nombre); // filtrar filas vacías
+
+    if (!importState.rows.length) {
+      err.textContent = 'No se encontraron alumnos en el archivo.';
+      err.classList.remove('hidden'); return;
+    }
+
+    await buildImportPreview();
+
+  } catch (e) {
+    console.error('handleImportFile:', e);
+    err.textContent = 'Error al leer el archivo: ' + e.message;
+    err.classList.remove('hidden');
+  }
+}
+
+async function buildImportPreview() {
+  // Consultar qué numero_alumno ya existen en BD
+  const numeros = importState.rows
+    .map(r => r.numero_alumno)
+    .filter(n => n !== null);
+
+  importState.existing = new Map();
+
+  if (numeros.length) {
+    const { data } = await db.from('alumnos')
+      .select('id, numero_alumno')
+      .in('numero_alumno', numeros)
+      .eq('eliminado', false);
+    (data || []).forEach(a => importState.existing.set(a.numero_alumno, a.id));
+  }
+
+  const totalNew      = importState.rows.filter(r => !importState.existing.has(r.numero_alumno)).length;
+  const totalExisting = importState.rows.filter(r =>  importState.existing.has(r.numero_alumno)).length;
+
+  $('import-count-total').textContent    = importState.rows.length;
+  $('import-count-new').textContent      = totalNew;
+  $('import-count-existing').textContent = totalExisting;
+
+  // Mostrar/ocultar opciones de modo
+  $('import-mode-wrap').classList.toggle('hidden', totalExisting === 0);
+
+  // Llenar tabla de preview (máximo 100 filas para no frenar el browser)
+  const tbody = $('import-table-body');
+  tbody.innerHTML = '';
+  const preview = importState.rows.slice(0, 100);
+  for (const r of preview) {
+    const exists = importState.existing.has(r.numero_alumno);
+    const tr = document.createElement('tr');
+    tr.className = exists ? 'row-exists' : 'row-new';
+    tr.innerHTML = `
+      <td>${r.numero_alumno ?? '—'}</td>
+      <td>${escapeHtml(r.apellido)}</td>
+      <td>${escapeHtml(r.nombre)}</td>
+      <td title="${escapeHtml(r.comision)}">${escapeHtml(r.comision.slice(0, 28))}${r.comision.length > 28 ? '…' : ''}</td>
+      <td>${escapeHtml(r.situacion)}</td>
+      <td><span class="import-badge ${exists ? 'import-badge-exists' : 'import-badge-new'}">${exists ? 'existe' : 'nuevo'}</span></td>
+    `;
+    tbody.appendChild(tr);
+  }
+  if (importState.rows.length > 100) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="6" style="text-align:center;color:var(--text-secondary);padding:10px">…y ${importState.rows.length - 100} más</td>`;
+    tbody.appendChild(tr);
+  }
+
+  // Pasar al paso 2
+  $('import-step-1').classList.add('hidden');
+  $('import-step-2').classList.remove('hidden');
+  $('import-confirm').classList.remove('hidden');
+  $('import-change-file').classList.remove('hidden');
+  $('import-cancel').classList.remove('hidden');
+}
+
+// Modo de importación
+$$('input[name="import-mode"]').forEach(r => {
+  r.addEventListener('change', () => {
+    importState.mode = document.querySelector('input[name="import-mode"]:checked').value;
+  });
+});
+
+// Ejecutar la importación
+$('import-confirm').onclick = async () => {
+  importState.mode = document.querySelector('input[name="import-mode"]:checked')?.value || 'merge';
+
+  // Filtrar según el modo
+  const toProcess = importState.mode === 'skip'
+    ? importState.rows.filter(r => !importState.existing.has(r.numero_alumno))
+    : importState.rows;
+
+  if (!toProcess.length) {
+    toast('No hay alumnos nuevos para importar con este modo.'); return;
+  }
+
+  // Paso 3: progreso
+  $('import-step-2').classList.add('hidden');
+  $('import-step-3').classList.remove('hidden');
+  $('import-confirm').classList.add('hidden');
+  $('import-change-file').classList.add('hidden');
+  $('import-cancel').classList.add('hidden');
+
+  const BATCH = 50;
+  let insertados = 0, actualizados = 0, errores = 0;
+  const total = toProcess.length;
+
+  for (let i = 0; i < total; i += BATCH) {
+    const batch = toProcess.slice(i, i + BATCH);
+
+    for (const r of batch) {
+      const alumnoData = {
+        numero_alumno: r.numero_alumno,
+        apellido:      r.apellido || '',
+        nombre:        r.nombre   || '',
+        comision:      r.comision  || null,
+        situacion:     r.situacion || null,
+        email:         r.email     || null,
+        telefono:      r.telefono  || null,
+        activa:        true,
+      };
+
+      const existingId = importState.existing.get(r.numero_alumno);
+
+      if (existingId && importState.mode === 'merge') {
+        // Actualizar
+        const { error } = await db.from('alumnos').update(alumnoData).eq('id', existingId);
+        if (error) { console.error('update:', error); errores++; } else actualizados++;
+      } else if (!existingId) {
+        // Insertar
+        alumnoData.created_by = state.profile.id;
+        const { error } = await db.from('alumnos').insert(alumnoData);
+        if (error) { console.error('insert:', error); errores++; } else insertados++;
+      }
+    }
+
+    // Actualizar barra de progreso
+    const pct = Math.round(((i + batch.length) / total) * 100);
+    $('import-progress-bar').style.width = pct + '%';
+    $('import-progress-text').textContent = `Importando... ${i + batch.length} de ${total}`;
+    // Yield al browser para que no se congele la UI
+    await new Promise(r => setTimeout(r, 0));
+  }
+
+  // Paso 4: resultado
+  $('import-step-3').classList.add('hidden');
+  $('import-step-4').classList.remove('hidden');
+  $('import-done').classList.remove('hidden');
+
+  const todoOk = errores === 0;
+  $('import-result-content').innerHTML = `
+    <div class="import-result">
+      <div class="import-result-icon">${todoOk ? '✅' : '⚠️'}</div>
+      <h3>${todoOk ? '¡Importación completada!' : 'Importación con advertencias'}</h3>
+      <p>${todoOk ? 'Todos los alumnos fueron procesados correctamente.' : `${errores} registro${errores > 1 ? 's' : ''} no se pudo${errores > 1 ? 'n' : ''} importar.`}</p>
+      <div class="import-result-stats">
+        ${insertados  > 0 ? `<div class="import-result-stat"><strong>${insertados}</strong> agregados</div>` : ''}
+        ${actualizados> 0 ? `<div class="import-result-stat"><strong>${actualizados}</strong> actualizados</div>` : ''}
+        ${errores     > 0 ? `<div class="import-result-stat"><strong>${errores}</strong> con error</div>` : ''}
+      </div>
+    </div>
+  `;
+
+  // Refrescar la lista de alumnos
+  loadAdminAlumnos();
+};
+
+$('import-done').onclick = () => {
+  $('modal-import').classList.add('hidden');
 };
 
 /* ═══════════════════════════════════════════════════════════════

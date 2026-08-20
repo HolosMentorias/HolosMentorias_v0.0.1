@@ -411,6 +411,10 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Nuevo alumno
           </button>
+          <button class="btn-import" id="btn-import-excel">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Importar Excel
+          </button>
         </section>
 
         <div class="search-controls-row">
@@ -735,6 +739,20 @@
         </div>
         <div class="form-row">
           <div class="form-group">
+            <label>N° alumno</label>
+            <input type="number" id="form-numero-alumno" placeholder="1" min="1" />
+          </div>
+          <div class="form-group">
+            <label>Situación</label>
+            <input type="text" id="form-situacion" placeholder="Alumno Regular" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Comisión</label>
+          <input type="text" id="form-comision" placeholder="1° 1° TN TDH (Agosto)" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
             <label>Teléfono</label>
             <input type="tel" id="form-telefono" placeholder="+54 11 ..." />
           </div>
@@ -980,10 +998,126 @@
     </div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════
+       MODAL · Importar alumnos desde Excel
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay hidden" id="modal-import">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>📥 Importar alumnos desde Excel</h2>
+        <button class="btn-icon" id="import-close" aria-label="Cerrar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+
+        <!-- PASO 1: Seleccionar archivo -->
+        <div id="import-step-1">
+          <div class="import-dropzone" id="import-dropzone">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--accent)"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <p class="import-dropzone-text">Arrastrá el archivo acá<br/>o tocá para seleccionar</p>
+            <p class="hint">Sólo archivos .xlsx — columnas: #, Apellido, Nombre, Comisión, Situación, Mail, Celular</p>
+            <input type="file" id="import-file-input" accept=".xlsx,.xls" hidden />
+          </div>
+          <p id="import-error" class="error-msg hidden"></p>
+        </div>
+
+        <!-- PASO 2: Preview + modo de importación -->
+        <div id="import-step-2" class="hidden">
+          <div class="import-preview-header">
+            <div class="import-preview-stat">
+              <span class="import-stat-num" id="import-count-total">0</span>
+              <span class="import-stat-label">en el Excel</span>
+            </div>
+            <div class="import-preview-stat">
+              <span class="import-stat-num accent" id="import-count-new">0</span>
+              <span class="import-stat-label">alumnos nuevos</span>
+            </div>
+            <div class="import-preview-stat">
+              <span class="import-stat-num warn" id="import-count-existing">0</span>
+              <span class="import-stat-label">ya existen</span>
+            </div>
+          </div>
+
+          <!-- Sólo se muestra si hay existentes -->
+          <div id="import-mode-wrap" class="hidden">
+            <p class="import-mode-title">¿Qué hacemos con los alumnos que ya existen?</p>
+            <div class="import-mode-options">
+              <label class="import-mode-opt">
+                <input type="radio" name="import-mode" value="merge" checked />
+                <div class="import-mode-card">
+                  <span class="import-mode-icon">🔄</span>
+                  <div>
+                    <strong>Actualizar + agregar</strong>
+                    <p>Pisa los datos de los existentes con los del Excel y agrega los nuevos.</p>
+                  </div>
+                </div>
+              </label>
+              <label class="import-mode-opt">
+                <input type="radio" name="import-mode" value="skip" />
+                <div class="import-mode-card">
+                  <span class="import-mode-icon">➕</span>
+                  <div>
+                    <strong>Solo agregar faltantes</strong>
+                    <p>Ignora los que ya existen y agrega únicamente los nuevos.</p>
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Tabla preview -->
+          <div class="import-table-wrap">
+            <table class="import-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Apellido</th>
+                  <th>Nombre</th>
+                  <th>Comisión</th>
+                  <th>Situación</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="import-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- PASO 3: Progreso -->
+        <div id="import-step-3" class="hidden">
+          <div class="import-progress-wrap">
+            <div class="spinner" style="margin:0 auto 16px"></div>
+            <p id="import-progress-text">Importando...</p>
+            <div class="import-progress-bar-track">
+              <div class="import-progress-bar-fill" id="import-progress-bar"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PASO 4: Resultado -->
+        <div id="import-step-4" class="hidden">
+          <div class="import-result" id="import-result-content"></div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="import-cancel">Cancelar</button>
+        <button class="btn-secondary hidden" id="import-change-file">Cambiar archivo</button>
+        <button class="btn-primary hidden" id="import-confirm">Importar</button>
+        <button class="btn-primary hidden" id="import-done">Listo</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast -->
   <div class="toast hidden" id="toast"></div>
 
   <!-- Config (inyectada por Cloudflare en build, ver README) -->
+  <footer class="app-version-footer">
+    Holos Mentorías · <span>v0.0.2</span>
+  </footer>
+
   <script>
     // Estos valores son PÚBLICOS por diseño (la seguridad real está en RLS).
     // En producción los inyecta Cloudflare Pages como variables de entorno
