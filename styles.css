@@ -74,21 +74,17 @@ body {
 /* ══════════════════════════════════════
    LOGIN
 ══════════════════════════════════════ */
-/* El login-screen es una pantalla fixed que cubre todo */
 #login-screen {
   background: linear-gradient(145deg, #2C2417 0%, #3D3425 50%, #1E3A1A 100%) !important;
   position: fixed !important;
   inset: 0 !important;
   overflow-y: auto !important;
+  display: none !important;
 }
-/* Cuando está activo: CSS Grid centra el único hijo visible */
 #login-screen.active {
-  display: grid !important;
-  place-items: center !important;
-  padding: 24px !important;
+  display: block !important;
   animation: fadeIn .25s ease both;
 }
-/* Los orbs flotan detrás, fuera del grid flow */
 .login-bg {
   position: fixed;
   inset: 0;
@@ -112,10 +108,19 @@ body {
   background: #C4825A;
   bottom: -60px; left: -60px;
 }
-/* Contenedor de paneles: el único grid item no-absolute */
+/* ─── CENTRADO HORIZONTAL CON MARGIN AUTO ───
+   El método más confiable desde CSS 2.1.
+   login-panels = bloque con max-width + margin:0 auto.
+   login-panels también es flex-col para centrar verticalmente. */
 .login-panels {
-  width: 100%;
+  width: calc(100% - 48px);
   max-width: 400px;
+  margin: 0 auto;              /* centrado horizontal GARANTIZADO */
+  min-height: 100dvh;          /* ocupa el alto de la pantalla */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;     /* centrado vertical */
+  padding: 24px 0;
   position: relative;
   z-index: 1;
 }
