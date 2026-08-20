@@ -3669,7 +3669,36 @@ async function handleImportFile(file) {
       err.classList.remove('hidden'); return;
     }
 
-    await buildImportPreview();
+    // ── Filtrar solo las comisiones permitidas ──────────────────
+    // Solo se importan alumnos cuya Comisión sea exactamente una
+    // de las 8 comisiones definidas para Holos Mentorías.
+    const COMISIONES_PERMITIDAS = new Set([
+      '1° 1° TS TDH (Agosto)',
+      '1° 1° TS TDH (Marzo)',
+      '1° 1° TM TDH (Agosto)',
+      '1° 1° TM TDH (Marzo)',
+      '1° 1° TT TDH (Agosto)',
+      '1° 1° TT TDH (Marzo)',
+      '1° 1° TN TDH (Agosto)',
+      '1° 1° TN TDH (Marzo)',
+    ]);
+
+    const totalEnExcel = importState.rows.length;
+    importState.rows = importState.rows.filter(r => COMISIONES_PERMITIDAS.has(r.comision));
+    const descartados = totalEnExcel - importState.rows.length;
+
+    if (!importState.rows.length) {
+      err.textContent = `El archivo no contiene alumnos de las comisiones habilitadas. Se encontraron ${totalEnExcel} filas pero ninguna corresponde a una comisión Holos.`;
+      err.classList.remove('hidden'); return;
+    }
+
+    // Informar cuántos se descartaron (no es un error, es informativo)
+    if (descartados > 0) {
+      const infoEl = document.createElement('p');
+      infoEl.style.cssText = 'font-size:12px;color:var(--text-secondary);margin-top:8px;text-align:center';
+      infoEl.textContent = `ℹ️ ${descartados} fila${descartados > 1 ? 's' : ''} de otras comisiones no se va${descartados > 1 ? 'n' : ''} a importar.`;
+      $('import-step-1').appendChild(infoEl);
+    }
 
   } catch (e) {
     console.error('handleImportFile:', e);
