@@ -4344,3 +4344,159 @@ input:checked + .switch-track-video { background: #3B82F6; }
   gap: 8px;
 }
 
+
+
+/* ═══════════════════════════════════════════════════════════════
+   HOLOS · Selección masiva de alumnos
+═══════════════════════════════════════════════════════════════ */
+
+/* Botón "Seleccionar" en los controles */
+.btn-bulk-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+.btn-bulk-toggle:hover  { border-color: var(--accent); color: var(--accent-dark); }
+.btn-bulk-toggle.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent-dark); }
+
+/* Checkbox sobre cada tarjeta */
+.alumno-card .bulk-checkbox {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-card);
+  display: none;             /* oculto por defecto */
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  transition: var(--transition);
+  flex-shrink: 0;
+}
+/* Mostrar checkboxes en modo selección */
+.bulk-mode .alumno-card { position: relative; cursor: pointer; }
+.bulk-mode .alumno-card .bulk-checkbox { display: flex; }
+.bulk-mode .alumno-card.bulk-selected .bulk-checkbox {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.bulk-mode .alumno-card.bulk-selected .bulk-checkbox::after {
+  content: '';
+  width: 11px; height: 7px;
+  border-left: 2.5px solid white;
+  border-bottom: 2.5px solid white;
+  transform: rotate(-45deg) translateY(-1px);
+  display: block;
+}
+/* Resaltar tarjetas seleccionadas */
+.bulk-mode .alumno-card.bulk-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* ── Barra flotante de acciones masivas ── */
+.bulk-bar {
+  position: fixed;
+  bottom: 28px;         /* encima del footer de versión */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  width: min(600px, calc(100vw - 24px));
+  animation: slideUp .2s ease;
+}
+@keyframes slideUp {
+  from { transform: translateX(-50%) translateY(20px); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+}
+.bulk-bar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #2C2417;
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  box-shadow: 0 8px 32px rgba(44,36,23,.35), 0 2px 8px rgba(44,36,23,.2);
+  flex-wrap: wrap;
+}
+.bulk-bar-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.bulk-select-all {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-light);
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: var(--transition);
+  white-space: nowrap;
+}
+.bulk-select-all:hover { background: rgba(255,255,255,.1); }
+.bulk-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: white;
+}
+.bulk-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-bulk-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+.btn-bulk-disable {
+  background: #E8C84A;
+  color: #4A3800;
+}
+.btn-bulk-disable:hover { background: #F0D060; }
+.btn-bulk-delete {
+  background: #B85450;
+  color: white;
+}
+.btn-bulk-delete:hover { background: #C96560; }
+.btn-bulk-cancel {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.3);
+  color: rgba(255,255,255,.8);
+  font-size: 12px;
+  font-family: var(--font-body);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.btn-bulk-cancel:hover { background: rgba(255,255,255,.1); color: white; }
+

@@ -1113,7 +1113,19 @@ function renderAdminAlumnos() {
   }
 
   $$('.admin-alumno-card', grid).forEach(card => {
-    card.onclick = () => openAlumnoForm(card.dataset.id);
+    // Agregar el elemento de checkbox visual
+    if (!card.querySelector('.bulk-checkbox')) {
+      const cb = document.createElement('div');
+      cb.className = 'bulk-checkbox';
+      card.prepend(cb);
+    }
+    card.onclick = (e) => {
+      if (bulk.active) {
+        toggleBulkCard(card, +card.dataset.id);
+      } else {
+        openAlumnoForm(card.dataset.id);
+      }
+    };
   });
 }
 
@@ -3811,8 +3823,183 @@ $('grupo-close').onclick  = () => $('modal-asignar-grupo').classList.add('hidden
 $('grupo-cancel').onclick = () => $('modal-asignar-grupo').classList.add('hidden');
 
 /* ═══════════════════════════════════════════════════════════════
-   IMPORTACIÓN DE ALUMNOS DESDE EXCEL (v0.0.2)
+   ACCIONES MASIVAS SOBRE ALUMNOS (admin)
+   Permite seleccionar uno, varios o todos los alumnos visibles
+   y deshabilitar (activa=false) o eliminar (eliminado=true).
+═══════════════════════════════════════════════════════════════ */
 
+const bulk = {
+  active:  false,          // modo selección activo
+  selected: new Set(),     // IDs de alumnos seleccionados
+  action:  null,           // 'disable' | 'delete'
+};
+
+/* ── Activar/desactivar modo selección ── */
+$('btn-bulk-toggle').onclick = () => {
+  bulk.active = !bulk.active;
+  bulk.selected.clear();
+  $('btn-bulk-toggle').classList.toggle('active', bulk.active);
+  $('btn-bulk-toggle').innerHTML = bulk.active
+    ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancelar`
+    : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9,11 12,14 22,4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> Seleccionar`;
+
+  // Activar/desactivar clase bulk-mode en el grid
+  const grid = $('admin-alumnos-grid');
+  if (grid) grid.classList.toggle('bulk-mode', bulk.active);
+
+  actualizarBulkBar();
+};
+
+$('btn-bulk-cancel').onclick = () => {
+  bulk.active = false;
+  bulk.selected.clear();
+  $('btn-bulk-toggle').classList.remove('active');
+  $('btn-bulk-toggle').innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9,11 12,14 22,4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2h11"/></svg> Seleccionar`;
+  const grid = $('admin-alumnos-grid');
+  if (grid) {
+    grid.classList.remove('bulk-mode');
+    $$('.alumno-card', grid).forEach(c => c.classList.remove('bulk-selected'));
+  }
+  actualizarBulkBar();
+};
+
+/* ── Seleccionar / deseleccionar un alumno ── */
+function toggleBulkCard(cardEl, id) {
+  if (!bulk.active) return;
+  if (bulk.selected.has(id)) {
+    bulk.selected.delete(id);
+    cardEl.classList.remove('bulk-selected');
+  } else {
+    bulk.selected.add(id);
+    cardEl.classList.add('bulk-selected');
+  }
+  actualizarBulkBar();
+}
+
+/* ── Seleccionar todos ── */
+$('bulk-select-all').onclick = () => {
+  const grid = $('admin-alumnos-grid');
+  if (!grid) return;
+  const cards = $$('.alumno-card:not(.is-eliminado)', grid);
+  const todosSeleccionados = cards.every(c => bulk.selected.has(+c.dataset.id));
+
+  if (todosSeleccionados) {
+    // Deseleccionar todos
+    cards.forEach(c => { bulk.selected.delete(+c.dataset.id); c.classList.remove('bulk-selected'); });
+    $('bulk-select-all').textContent = 'Seleccionar todos';
+  } else {
+    // Seleccionar todos
+    cards.forEach(c => { bulk.selected.add(+c.dataset.id); c.classList.add('bulk-selected'); });
+    $('bulk-select-all').textContent = 'Deseleccionar todos';
+  }
+  actualizarBulkBar();
+};
+
+/* ── Actualizar la barra y el contador ── */
+function actualizarBulkBar() {
+  const n = bulk.selected.size;
+  $('bulk-bar').classList.toggle('hidden', !bulk.active);
+  $('bulk-count').textContent = `${n} alumno${n !== 1 ? 's' : ''} seleccionado${n !== 1 ? 's' : ''}`;
+
+  // Habilitar/deshabilitar botones de acción
+  $('btn-bulk-disable').disabled = n === 0;
+  $('btn-bulk-delete').disabled  = n === 0;
+}
+
+/* ── Abrir modal de confirmación ── */
+$('btn-bulk-disable').onclick = () => abrirBulkConfirm('disable');
+$('btn-bulk-delete').onclick  = () => abrirBulkConfirm('delete');
+
+function abrirBulkConfirm(action) {
+  if (!bulk.selected.size) return;
+  bulk.action = action;
+  const n = bulk.selected.size;
+  const isDelete = action === 'delete';
+
+  $('bulk-confirm-title').textContent = isDelete
+    ? `Eliminar ${n} alumno${n > 1 ? 's' : ''}`
+    : `Deshabilitar ${n} alumno${n > 1 ? 's' : ''}`;
+
+  $('bulk-confirm-desc').innerHTML = isDelete
+    ? `Esta acción <strong>no tiene vuelta atrás fácil</strong>. Los ${n} alumno${n > 1 ? 's' : ''} seleccionado${n > 1 ? 's' : ''} quedar${n > 1 ? 'á' : 'án'} eliminado${n > 1 ? 's' : ''} y dejar${n > 1 ? 'án' : 'á'} de aparecer en los listados de todos los mentores.`
+    : `Los ${n} alumno${n > 1 ? 's' : ''} seleccionado${n > 1 ? 's' : ''} quedar${n > 1 ? 'án' : 'á'} deshabilitado${n > 1 ? 's' : ''}. Dejar${n > 1 ? 'án' : 'á'} de aparecer en los listados pero podrás reactivarlo${n > 1 ? 's' : ''} más adelante.`;
+
+  // La palabra ELIMINAR solo se pide para borrado
+  $('bulk-confirm-word-wrap').classList.toggle('hidden', !isDelete);
+  if (isDelete) {
+    $('bulk-confirm-word').value = '';
+    setTimeout(() => $('bulk-confirm-word').focus(), 50);
+  }
+
+  $('bulk-confirm-error').classList.add('hidden');
+  $('bulk-confirm-ok').style.background = isDelete ? '#B85450' : '#C4825A';
+  $('bulk-confirm-ok').textContent = isDelete ? 'Sí, eliminar' : 'Sí, deshabilitar';
+  $('modal-bulk-confirm').classList.remove('hidden');
+}
+
+$('bulk-confirm-close').onclick      = () => $('modal-bulk-confirm').classList.add('hidden');
+$('bulk-confirm-cancel-btn').onclick = () => $('modal-bulk-confirm').classList.add('hidden');
+
+/* Confirmar con Enter si ya escribió ELIMINAR */
+$('bulk-confirm-word').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('bulk-confirm-ok').click();
+});
+
+/* ── Ejecutar la acción masiva ── */
+$('bulk-confirm-ok').onclick = async () => {
+  const isDelete = bulk.action === 'delete';
+  const err = $('bulk-confirm-error');
+  err.classList.add('hidden');
+
+  // Validar la palabra ELIMINAR
+  if (isDelete) {
+    const palabra = ($('bulk-confirm-word').value || '').trim().toUpperCase();
+    if (palabra !== 'ELIMINAR') {
+      err.textContent = 'Escribí la palabra ELIMINAR para confirmar.';
+      err.classList.remove('hidden');
+      $('bulk-confirm-word').focus();
+      return;
+    }
+  }
+
+  const ids = [...bulk.selected];
+  const btn = $('bulk-confirm-ok');
+  btn.disabled = true;
+  btn.textContent = 'Aplicando...';
+
+  const payload = isDelete
+    ? { eliminado: true, mentor_id: null }
+    : { activa: false };
+
+  const { error } = await db.from('alumnos')
+    .update(payload)
+    .in('id', ids);
+
+  btn.disabled = false;
+  btn.textContent = isDelete ? 'Sí, eliminar' : 'Sí, deshabilitar';
+
+  if (error) {
+    console.error('bulk action:', error);
+    err.textContent = 'Error: ' + error.message;
+    err.classList.remove('hidden');
+    return;
+  }
+
+  $('modal-bulk-confirm').classList.add('hidden');
+
+  const n = ids.length;
+  toast(isDelete
+    ? `✓ ${n} alumno${n > 1 ? 's' : ''} eliminado${n > 1 ? 's' : ''}`
+    : `✓ ${n} alumno${n > 1 ? 's' : ''} deshabilitado${n > 1 ? 's' : ''}`
+  );
+
+  // Salir del modo selección y refrescar
+  $('btn-bulk-cancel').click();
+  loadAdminAlumnos();
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   IMPORTACIÓN DE ALUMNOS DESDE EXCEL (v0.0.2)
    Flujo:
    1. Admin selecciona / arrastra un .xlsx
    2. SheetJS lo procesa client-side (sin subir nada al servidor)
