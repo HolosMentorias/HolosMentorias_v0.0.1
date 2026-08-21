@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════
    MABY MENTORÍAS — CSS Mobile-First
    Paleta: tierra cálida + verde salvia + crema
-   Tipografía: DM Serif Display + DM Sans ver
+   Tipografía: DM Serif Display + DM Sans 0.0.24
 ═══════════════════════════════════════════════ */
 
 /* ── Variables ── */
@@ -72,39 +72,22 @@ body {
 }
 
 /* ══════════════════════════════════════
-   LOGIN — enfoque estándar de la industria
+   LOGIN
+══════════════════════════════════════
+   NOTA IMPORTANTE: el posicionamiento y centrado del login
+   (#login-screen, .login-panels, .login-card, .login-bg) se
+   define con ESTILOS INLINE directamente en el HTML, no acá.
+   Esto es intencional: los estilos inline tienen mayor
+   especificidad que cualquier regla de esta hoja de estilos,
+   así que es estructuralmente imposible que otra regla CSS
+   (actual o futura) descentre el login por un conflicto de
+   cascada o especificidad.
+   Este bloque solo mantiene lo que el inline NO puede resolver:
+   el toggle de visibilidad vía clases (JS) y las animaciones.
 ══════════════════════════════════════ */
-/*
- * ESTRATEGIA:
- * - #login-screen = contenedor a pantalla completa (fixed + inset:0)
- *   con display:block cuando activo. NO es flex.
- * - .login-panels = flex container que ocupa 100% del padre + 100dvh mínimo
- *   con align-items:center + justify-content:center para centrar la card.
- * - .login-card = ancho fijo/max, sin margin auto necesario.
- *
- * Este es el patrón que usan Gmail, Netflix, Airbnb, etc.
- * NO puede fallar porque .login-panels llena todo el viewport y centra
- * su hijo usando flex — sin interferencias del overflow o scrollbars.
- */
-#login-screen {
-  background: linear-gradient(145deg, #2C2417 0%, #3D3425 50%, #1E3A1A 100%);
-  position: fixed;
-  inset: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  display: none;
-  z-index: 100;
-}
+.screen.active#login-screen,
 #login-screen.active {
-  display: block;
   animation: fadeIn .25s ease both;
-}
-.login-bg {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  overflow: hidden;
 }
 .login-orb {
   position: absolute;
@@ -122,29 +105,11 @@ body {
   background: #C4825A;
   bottom: -60px; left: -60px;
 }
-/*
- * ESTE ES EL FLEX CONTAINER que centra la card.
- * Ocupa 100% del ancho de #login-screen (que es 100vw) y al menos 100dvh de alto.
- * justify-content:center + align-items:center = card perfectamente centrada.
- */
-.login-panels {
-  position: relative;
-  z-index: 1;
-  min-height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 20px;
-}
 .login-card {
-  background: rgba(250,247,242,.97);
-  border-radius: var(--radius-xl);
-  padding: 40px 32px 36px;
-  width: 100%;
-  max-width: 400px;
-  box-shadow: var(--shadow-lg);
   animation: slideUp .5s cubic-bezier(.34,1.56,.64,1) both;
 }
+/* El toggle de paneles (login/registro/reset) SÍ debe seguir siendo CSS,
+   porque cambia dinámicamente por JS con classList.toggle('hidden') */
 .login-card.hidden { display: none !important; }
 
 .login-logo {
