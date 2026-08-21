@@ -310,6 +310,10 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
           Usuarios
         </button>
+        <button class="nav-tab" data-view="super-backup" data-role="super_admin">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+          Backup
+        </button>
         </div>
       </nav>
     </header>
@@ -662,9 +666,41 @@
         </section>
       </section>
 
+      <!-- ═══════════════════════════════════════════════
+           VISTA SUPER ADMIN · "Backup"
+           Exportación / importación completa del sistema
+      ═══════════════════════════════════════════════ -->
+      <section class="view hidden" data-view-pane="super-backup">
+        <div class="backup-page-header">
+          <h2 class="section-title">Backup y restauración</h2>
+          <p class="backup-subtitle">Copia de seguridad completa: alumnos, mentores, admins, mensajes y configuraciones. Solo vos, como super admin, podés hacer esto.</p>
+        </div>
+
+        <div class="backup-cards">
+          <div class="backup-card">
+            <div class="backup-card-icon">📤</div>
+            <h3>Exportar backup</h3>
+            <p>Descarga un archivo .json con absolutamente todo: alumnos, mentores, admins, mensajes de chat, mensajes globales, colores y configuraciones. Guardalo en un lugar seguro.</p>
+            <button class="btn-primary" id="btn-backup-export">Exportar backup completo</button>
+            <p class="backup-hint" id="backup-export-status"></p>
+          </div>
+
+          <div class="backup-card">
+            <div class="backup-card-icon">📥</div>
+            <h3>Importar backup</h3>
+            <p>Restaura o combina un backup previamente exportado. No se borra nada existente: se actualiza lo que coincide y se agrega lo nuevo.</p>
+            <button class="btn-secondary" id="btn-backup-import">Importar backup</button>
+          </div>
+        </div>
+
+        <div class="backup-note">
+          <strong>⚠️ Importante:</strong> los mentores que se restauren como perfiles nuevos van a aparecer <strong>pausados (transparentes)</strong> en la lista de mentores hasta que los reactivés manualmente, para que puedas verificar que su acceso sigue siendo válido antes de dejarlos operar.
+        </div>
+      </section>
+
     </main>
 
-  </div><!-- fin #app-screen -->
+    </div><!-- fin #app-screen -->
 
   <!-- ═══════════════════════════════════════════════════════════
        MODAL · Editar perfil propio (todos los roles)
@@ -1227,6 +1263,100 @@
       <div class="modal-footer">
         <button class="btn-secondary" id="bulk-confirm-cancel-btn">Cancelar</button>
         <button class="btn-primary" id="bulk-confirm-ok" style="background:#B85450">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       MODAL · Importar backup completo (super_admin)
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay hidden" id="modal-backup-import">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>📥 Importar backup</h2>
+        <button class="btn-icon" id="backup-import-close" aria-label="Cerrar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+
+        <!-- PASO 1: seleccionar archivo -->
+        <div id="backup-import-step-1">
+          <div class="import-dropzone" id="backup-import-dropzone">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--accent)"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <p class="import-dropzone-text">Arrastrá el archivo .json acá<br/>o tocá para seleccionar</p>
+            <p class="hint">Solo archivos generados por "Exportar backup completo"</p>
+            <input type="file" id="backup-import-file-input" accept=".json" hidden />
+          </div>
+          <p id="backup-import-error" class="error-msg hidden"></p>
+        </div>
+
+        <!-- PASO 2: preview -->
+        <div id="backup-import-step-2" class="hidden">
+          <p class="hint" style="margin-bottom:12px">Este backup fue generado el <strong id="backup-import-fecha">—</strong>. Se va a combinar con los datos actuales (no se borra nada).</p>
+
+          <p class="import-mode-title">¿Qué querés restaurar?</p>
+          <div class="backup-category-list" id="backup-category-list">
+            <label class="backup-category-item">
+              <input type="checkbox" data-category="profiles" checked />
+              <div>
+                <strong>Usuarios</strong>
+                <span id="backup-cat-count-profiles">0 en el backup</span>
+              </div>
+            </label>
+            <label class="backup-category-item">
+              <input type="checkbox" data-category="alumnos" checked />
+              <div>
+                <strong>Alumnos</strong>
+                <span id="backup-cat-count-alumnos">0 en el backup</span>
+              </div>
+            </label>
+            <label class="backup-category-item">
+              <input type="checkbox" data-category="conversations" checked />
+              <div>
+                <strong>Conversaciones</strong>
+                <span id="backup-cat-count-conversations">0 en el backup</span>
+              </div>
+            </label>
+            <label class="backup-category-item">
+              <input type="checkbox" data-category="messages" checked />
+              <div>
+                <strong>Mensajes</strong>
+                <span id="backup-cat-count-messages">0 en el backup</span>
+              </div>
+            </label>
+            <label class="backup-category-item">
+              <input type="checkbox" data-category="broadcast_reads" checked />
+              <div>
+                <strong>Lecturas de mensajes globales</strong>
+                <span id="backup-cat-count-broadcast_reads">0 en el backup</span>
+              </div>
+            </label>
+          </div>
+          <p class="hint" style="margin-top:10px">Si desmarcás "Usuarios" o "Conversaciones" pero algo que sí importás depende de ellos, se va a usar lo que ya existe en el sistema (no se pierde nada, solo no se sobreescribe).</p>
+        </div>
+
+        <!-- PASO 3: progreso -->
+        <div id="backup-import-step-3" class="hidden">
+          <div class="import-progress-wrap">
+            <div class="spinner" style="margin:0 auto 16px"></div>
+            <p id="backup-import-progress-text">Restaurando...</p>
+            <div class="import-progress-bar-track">
+              <div class="import-progress-bar-fill" id="backup-import-progress-bar"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PASO 4: resultado -->
+        <div id="backup-import-step-4" class="hidden">
+          <div class="import-result" id="backup-import-result-content"></div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="backup-import-cancel">Cancelar</button>
+        <button class="btn-primary hidden" id="backup-import-confirm">Confirmar e importar</button>
+        <button class="btn-primary hidden" id="backup-import-done">Listo</button>
       </div>
     </div>
   </div>

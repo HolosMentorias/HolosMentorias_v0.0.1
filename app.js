@@ -4335,6 +4335,390 @@ $('import-done').onclick = () => {
 };
 
 /* ═══════════════════════════════════════════════════════════════
+   BACKUP COMPLETO (super_admin) — exportar / importar
+
+   Exporta: profiles (todos los roles), alumnos (todos, incluidos
+   eliminados/bajas), conversations, messages, broadcast_reads.
+
+   Importar es SIEMPRE modo "combinar": nunca borra nada. Usa
+   upsert por id. Orden de importación respeta las dependencias
+   de foreign key:
+     1. profiles   (mentores nuevos entran como 'pausado')
+     2. alumnos    (si el mentor_id no se pudo restaurar, se
+                    guarda el alumno igual pero sin mentor)
+     3. conversations
+     4. messages
+     5. broadcast_reads
+═══════════════════════════════════════════════════════════════ */
+
+const BACKUP_VERSION = 1;
+
+$('btn-backup-export').onclick = async () => {
+  const btn = $('btn-backup-export');
+  const status = $('backup-export-status');
+  btn.disabled = true;
+  btn.textContent = 'Generando backup...';
+  status.textContent = '';
+
+  try {
+    const [profiles, alumnos, conversations, messages, broadcastReads] = await Promise.all([
+      db.from('profiles').select('*'),
+      db.from('alumnos').select('*'),
+      db.from('conversations').select('*'),
+      db.from('messages').select('*'),
+      db.from('broadcast_reads').select('*'),
+    ]);
+
+    const errores = [profiles, alumnos, conversations, messages, broadcastReads]
+      .filter(r => r.error);
+    if (errores.length) {
+      console.error('Errores al exportar:', errores);
+      status.textContent = '❌ Error al leer algunos datos. Ver consola.';
+      btn.disabled = false;
+      btn.textContent = 'Exportar backup completo';
+      return;
+    }
+
+    const backup = {
+      backup_version: BACKUP_VERSION,
+      exported_at: new Date().toISOString(),
+      exported_by: state.profile.email,
+      counts: {
+        profiles: profiles.data.length,
+        alumnos: alumnos.data.length,
+        conversations: conversations.data.length,
+        messages: messages.data.length,
+        broadcast_reads: broadcastReads.data.length,
+      },
+      data: {
+        profiles: profiles.data,
+        alumnos: alumnos.data,
+        conversations: conversations.data,
+        messages: messages.data,
+        broadcast_reads: broadcastReads.data,
+      },
+    };
+
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const fecha = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `holos-backup-${fecha}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    status.textContent = `✓ Backup generado: ${backup.counts.profiles} usuarios, ${backup.counts.alumnos} alumnos, ${backup.counts.messages} mensajes.`;
+  } catch (e) {
+    console.error('exportBackup:', e);
+    status.textContent = '❌ Error inesperado al generar el backup.';
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Exportar backup completo';
+};
+
+/* ── Importar backup ── */
+
+const backupImport = {
+  parsed: null, // el JSON completo parseado
+};
+
+function openBackupImportModal() {
+  backupImport.parsed = null;
+  $('backup-import-step-1').classList.remove('hidden');
+  $('backup-import-step-2').classList.add('hidden');
+  $('backup-import-step-3').classList.add('hidden');
+  $('backup-import-step-4').classList.add('hidden');
+  $('backup-import-error').classList.add('hidden');
+  $('backup-import-confirm').classList.add('hidden');
+  $('backup-import-done').classList.add('hidden');
+  $('backup-import-cancel').classList.remove('hidden');
+  $('backup-import-file-input').value = '';
+  $('modal-backup-import').classList.remove('hidden');
+}
+
+$('btn-backup-import').onclick = () => openBackupImportModal();
+$('backup-import-close').onclick  = () => $('modal-backup-import').classList.add('hidden');
+$('backup-import-cancel').onclick = () => $('modal-backup-import').classList.add('hidden');
+
+$('backup-import-dropzone').onclick = () => $('backup-import-file-input').click();
+$('backup-import-dropzone').addEventListener('dragover', e => {
+  e.preventDefault();
+  $('backup-import-dropzone').classList.add('drag-over');
+});
+$('backup-import-dropzone').addEventListener('dragleave', () => {
+  $('backup-import-dropzone').classList.remove('drag-over');
+});
+$('backup-import-dropzone').addEventListener('drop', e => {
+  e.preventDefault();
+  $('backup-import-dropzone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleBackupFile(file);
+});
+$('backup-import-file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (file) handleBackupFile(file);
+});
+
+async function handleBackupFile(file) {
+  const err = $('backup-import-error');
+  err.classList.add('hidden');
+
+  if (!file.name.endsWith('.json')) {
+    err.textContent = 'El archivo debe ser .json';
+    err.classList.remove('hidden'); return;
+  }
+
+  try {
+    const text = await file.text();
+    const json = JSON.parse(text);
+
+    if (!json.data || !json.backup_version) {
+      err.textContent = 'Este archivo no parece ser un backup válido de Holos Mentorías.';
+      err.classList.remove('hidden'); return;
+    }
+
+    backupImport.parsed = json;
+
+    $('backup-import-fecha').textContent = json.exported_at
+      ? new Date(json.exported_at).toLocaleString('es-AR')
+      : 'fecha desconocida';
+
+    const c = json.counts || {
+      profiles: (json.data.profiles || []).length,
+      alumnos: (json.data.alumnos || []).length,
+      conversations: (json.data.conversations || []).length,
+      messages: (json.data.messages || []).length,
+      broadcast_reads: (json.data.broadcast_reads || []).length,
+    };
+
+    $('backup-cat-count-profiles').textContent = `${c.profiles} en el backup`;
+    $('backup-cat-count-alumnos').textContent = `${c.alumnos} en el backup`;
+    $('backup-cat-count-conversations').textContent = `${c.conversations} en el backup`;
+    $('backup-cat-count-messages').textContent = `${c.messages} en el backup`;
+    $('backup-cat-count-broadcast_reads').textContent = `${c.broadcast_reads} en el backup`;
+
+    // Re-marcar todas las categorías por defecto cada vez que se carga un archivo nuevo
+    $$('#backup-category-list input[type="checkbox"]').forEach(cb => cb.checked = true);
+
+    $('backup-import-step-1').classList.add('hidden');
+    $('backup-import-step-2').classList.remove('hidden');
+    $('backup-import-confirm').classList.remove('hidden');
+
+  } catch (e) {
+    console.error('handleBackupFile:', e);
+    err.textContent = 'No se pudo leer el archivo. ¿Es un JSON válido?';
+    err.classList.remove('hidden');
+  }
+}
+
+$('backup-import-confirm').onclick = async () => {
+  const json = backupImport.parsed;
+  if (!json) return;
+
+  // Leer qué categorías el super_admin quiere restaurar
+  const categoriasSeleccionadas = new Set();
+  $$('#backup-category-list input[type="checkbox"]:checked').forEach(cb => {
+    categoriasSeleccionadas.add(cb.dataset.category);
+  });
+
+  $('backup-import-step-2').classList.add('hidden');
+  $('backup-import-step-3').classList.remove('hidden');
+  $('backup-import-confirm').classList.add('hidden');
+  $('backup-import-cancel').classList.add('hidden');
+
+  const setProgress = (pct, text) => {
+    $('backup-import-progress-bar').style.width = pct + '%';
+    $('backup-import-progress-text').textContent = text;
+  };
+
+  const resultado = {
+    profiles:   { ok: 0, err: 0 },
+    alumnos:    { ok: 0, err: 0, sinMentor: 0 },
+    conversations: { ok: 0, err: 0 },
+    messages:   { ok: 0, err: 0 },
+    broadcast_reads: { ok: 0, err: 0 },
+    mentoresNuevosPausados: 0,
+  };
+
+  // ── 1. PROFILES ──────────────────────────────────────────────
+  // Se consultan los IDs existentes SIEMPRE (esté marcada la
+  // categoría o no), porque alumnos/conversaciones/mensajes
+  // necesitan saber qué perfiles son válidos para no romper
+  // ninguna referencia, incluso si "Usuarios" no se restaura.
+  setProgress(5, 'Verificando usuarios existentes...');
+  const profilesData = categoriasSeleccionadas.has('profiles') ? (json.data.profiles || []) : [];
+  const profileIdsExistentesAntes = new Set();
+  {
+    const { data: existentes } = await db.from('profiles').select('id');
+    (existentes || []).forEach(p => profileIdsExistentesAntes.add(p.id));
+  }
+  const profileIdsRestaurados = new Set();
+
+  if (categoriasSeleccionadas.has('profiles')) {
+    setProgress(5, 'Restaurando usuarios...');
+    for (let i = 0; i < profilesData.length; i++) {
+      const p = { ...profilesData[i] };
+      const esNuevo = !profileIdsExistentesAntes.has(p.id);
+
+      // Mentor nuevo restaurado → entra pausado (transparente) hasta
+      // que el super_admin lo reactive manualmente.
+      if (esNuevo && p.rol === 'mentor') {
+        p.estado_mentor = 'pausado';
+        resultado.mentoresNuevosPausados++;
+      }
+
+      const { error } = await db.from('profiles').upsert(p, { onConflict: 'id' });
+      if (error) {
+        console.warn('profile no restaurado:', p.id, p.email, error.message);
+        resultado.profiles.err++;
+      } else {
+        resultado.profiles.ok++;
+        profileIdsRestaurados.add(p.id);
+      }
+
+      if (i % 5 === 0) setProgress(5 + Math.round((i / Math.max(profilesData.length,1)) * 20), `Restaurando usuarios... ${i + 1}/${profilesData.length}`);
+    }
+  }
+  // Los que ya existían antes también cuentan como "restaurados" para las FK de alumnos/conversations,
+  // aunque "Usuarios" no se haya tildado para importar.
+  profileIdsExistentesAntes.forEach(id => profileIdsRestaurados.add(id));
+
+  // ── 2. ALUMNOS ───────────────────────────────────────────────
+  const alumnosData = categoriasSeleccionadas.has('alumnos') ? (json.data.alumnos || []) : [];
+  const BATCH = 50;
+  if (categoriasSeleccionadas.has('alumnos')) {
+    setProgress(25, 'Restaurando alumnos...');
+    for (let i = 0; i < alumnosData.length; i += BATCH) {
+      const batch = alumnosData.slice(i, i + BATCH).map(a => {
+        const alumno = { ...a };
+        // Si el mentor asignado no se pudo restaurar, no bloquear el
+        // alumno por una FK rota: lo dejamos sin mentor.
+        if (alumno.mentor_id && !profileIdsRestaurados.has(alumno.mentor_id)) {
+          alumno.mentor_id = null;
+          resultado.alumnos.sinMentor++;
+        }
+        return alumno;
+      });
+
+      const { error } = await db.from('alumnos').upsert(batch, { onConflict: 'id' });
+      if (error) {
+        console.warn('batch alumnos falló, reintentando 1 a 1:', error.message);
+        // Fallback: insertar de a uno para no perder todo el batch
+        for (const alumno of batch) {
+          const { error: e2 } = await db.from('alumnos').upsert(alumno, { onConflict: 'id' });
+          if (e2) resultado.alumnos.err++; else resultado.alumnos.ok++;
+        }
+      } else {
+        resultado.alumnos.ok += batch.length;
+      }
+
+      setProgress(25 + Math.round(((i + batch.length) / Math.max(alumnosData.length,1)) * 30), `Restaurando alumnos... ${Math.min(i + batch.length, alumnosData.length)}/${alumnosData.length}`);
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+
+  // ── 3. CONVERSATIONS ─────────────────────────────────────────
+  const convData = categoriasSeleccionadas.has('conversations') ? (json.data.conversations || []) : [];
+  const convIdsRestauradas = new Set();
+  {
+    const { data: convExistentes } = await db.from('conversations').select('id');
+    (convExistentes || []).forEach(c => convIdsRestauradas.add(c.id));
+  }
+  if (categoriasSeleccionadas.has('conversations')) {
+    setProgress(55, 'Restaurando conversaciones...');
+    for (const c of convData) {
+      // Si admin_id o mentor_id no existen, se salta (no se puede
+      // crear una conversación sin sus participantes válidos).
+      if (c.admin_id && !profileIdsRestaurados.has(c.admin_id)) { resultado.conversations.err++; continue; }
+      if (c.mentor_id && !profileIdsRestaurados.has(c.mentor_id)) { resultado.conversations.err++; continue; }
+      const { error } = await db.from('conversations').upsert(c, { onConflict: 'id' });
+      if (error) resultado.conversations.err++;
+      else { resultado.conversations.ok++; convIdsRestauradas.add(c.id); }
+    }
+  }
+
+  // ── 4. MESSAGES ───────────────────────────────────────────────
+  const msgsData = categoriasSeleccionadas.has('messages') ? (json.data.messages || []) : [];
+  if (categoriasSeleccionadas.has('messages')) {
+    setProgress(75, 'Restaurando mensajes...');
+    for (let i = 0; i < msgsData.length; i += BATCH) {
+      const batch = msgsData.slice(i, i + BATCH).filter(m =>
+        convIdsRestauradas.has(m.conversation_id) && profileIdsRestaurados.has(m.sender_id)
+      );
+      const saltados = msgsData.slice(i, i + BATCH).length - batch.length;
+      resultado.messages.err += saltados;
+
+      if (batch.length) {
+        const { error } = await db.from('messages').upsert(batch, { onConflict: 'id' });
+        if (error) {
+          for (const m of batch) {
+            const { error: e2 } = await db.from('messages').upsert(m, { onConflict: 'id' });
+            if (e2) resultado.messages.err++; else resultado.messages.ok++;
+          }
+        } else {
+          resultado.messages.ok += batch.length;
+        }
+      }
+      setProgress(75 + Math.round(((i + BATCH) / Math.max(msgsData.length,1)) * 15), `Restaurando mensajes... ${Math.min(i + BATCH, msgsData.length)}/${msgsData.length}`);
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+
+  // ── 5. BROADCAST_READS ───────────────────────────────────────
+  const brData = categoriasSeleccionadas.has('broadcast_reads') ? (json.data.broadcast_reads || []) : [];
+  if (categoriasSeleccionadas.has('broadcast_reads')) {
+    setProgress(92, 'Restaurando marcas de lectura...');
+    for (const br of brData) {
+      if (!profileIdsRestaurados.has(br.mentor_id)) { resultado.broadcast_reads.err++; continue; }
+      const { error } = await db.from('broadcast_reads')
+        .upsert(br, { onConflict: 'message_id,mentor_id' });
+      if (error) resultado.broadcast_reads.err++;
+      else resultado.broadcast_reads.ok++;
+    }
+  }
+
+  setProgress(100, 'Listo');
+
+  // ── Resultado final ──────────────────────────────────────────
+  $('backup-import-step-3').classList.add('hidden');
+  $('backup-import-step-4').classList.remove('hidden');
+  $('backup-import-done').classList.remove('hidden');
+
+  const totalErrores = resultado.profiles.err + resultado.alumnos.err +
+    resultado.conversations.err + resultado.messages.err + resultado.broadcast_reads.err;
+
+  $('backup-import-result-content').innerHTML = `
+    <div class="import-result">
+      <div class="import-result-icon">${totalErrores === 0 ? '✅' : '⚠️'}</div>
+      <h3>${totalErrores === 0 ? '¡Backup restaurado!' : 'Restaurado con advertencias'}</h3>
+      <p>Los datos se combinaron con lo que ya tenías. Nada existente fue borrado.</p>
+      <div class="import-result-stats">
+        <div class="import-result-stat"><strong>${resultado.profiles.ok}</strong>usuarios</div>
+        <div class="import-result-stat"><strong>${resultado.alumnos.ok}</strong>alumnos</div>
+        <div class="import-result-stat"><strong>${resultado.conversations.ok}</strong>conversaciones</div>
+        <div class="import-result-stat"><strong>${resultado.messages.ok}</strong>mensajes</div>
+        ${resultado.mentoresNuevosPausados > 0 ? `<div class="import-result-stat"><strong>${resultado.mentoresNuevosPausados}</strong>mentores nuevos (pausados)</div>` : ''}
+        ${resultado.alumnos.sinMentor > 0 ? `<div class="import-result-stat"><strong>${resultado.alumnos.sinMentor}</strong>alumnos sin mentor</div>` : ''}
+        ${totalErrores > 0 ? `<div class="import-result-stat"><strong>${totalErrores}</strong>con error</div>` : ''}
+      </div>
+      ${resultado.mentoresNuevosPausados > 0 ? `<p style="font-size:12px;color:#8B6F00;margin-top:14px">⏸ Los mentores nuevos quedaron <strong>pausados</strong>. Andá a "Mentores" y reactivalos manualmente después de verificar que su acceso sigue siendo válido.</p>` : ''}
+    </div>
+  `;
+
+  // Refrescar vistas relevantes si están cargadas
+  if (typeof loadAdminAlumnos === 'function') loadAdminAlumnos();
+  if (typeof loadAdminMentores === 'function') loadAdminMentores();
+};
+
+$('backup-import-done').onclick = () => {
+  $('modal-backup-import').classList.add('hidden');
+};
+
+/* ═══════════════════════════════════════════════════════════════
    15. BOOT
 ═══════════════════════════════════════════════════════════════ */
 
