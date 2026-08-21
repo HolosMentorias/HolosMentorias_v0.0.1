@@ -1,7 +1,8 @@
 /* ═══════════════════════════════════════════════
    MABY MENTORÍAS — CSS Mobile-First
    Paleta: tierra cálida + verde salvia + crema
-   Tipografía: DM Serif Display + DM Sans
+   Tipografía: DM Serif Display + DM Sans 
+   TEXTO CENTRADO EN LOGIN
 ═══════════════════════════════════════════════ */
 
 /* ── Variables ── */
@@ -169,7 +170,7 @@ body {
   font-size: .85rem;
   color: var(--text-muted);
   margin-bottom: 28px;
-  padding-left: 50px;
+  text-align: center;
 }
 
 /* ── Ojo contraseña ── */
@@ -4524,4 +4525,3 @@ input:checked + .switch-track-video { background: #3B82F6; }
   transition: var(--transition);
 }
 .btn-bulk-cancel:hover { background: rgba(255,255,255,.1); color: white; }
-
