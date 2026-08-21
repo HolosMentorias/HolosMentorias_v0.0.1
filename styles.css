@@ -72,33 +72,35 @@ body {
 }
 
 /* ══════════════════════════════════════
-   LOGIN
+   LOGIN — enfoque estándar de la industria
 ══════════════════════════════════════ */
 /*
- * ESTRATEGIA DE CENTRADO DUAL:
- * 1) El flex container centra con align-items:center (funciona si .login-panels está)
- * 2) .login-card tiene max-width:400px + margin:0 auto (funciona SIEMPRE como fallback)
- * De esta forma el login se centra independientemente de si el HTML tiene o no 
- * el wrapper .login-panels.
+ * ESTRATEGIA:
+ * - #login-screen = contenedor a pantalla completa (fixed + inset:0)
+ *   con display:block cuando activo. NO es flex.
+ * - .login-panels = flex container que ocupa 100% del padre + 100dvh mínimo
+ *   con align-items:center + justify-content:center para centrar la card.
+ * - .login-card = ancho fijo/max, sin margin auto necesario.
+ *
+ * Este es el patrón que usan Gmail, Netflix, Airbnb, etc.
+ * NO puede fallar porque .login-panels llena todo el viewport y centra
+ * su hijo usando flex — sin interferencias del overflow o scrollbars.
  */
 #login-screen {
-  background: linear-gradient(145deg, #2C2417 0%, #3D3425 50%, #1E3A1A 100%) !important;
-  position: fixed !important;
-  inset: 0 !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  display: none !important;
+  background: linear-gradient(145deg, #2C2417 0%, #3D3425 50%, #1E3A1A 100%);
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: none;
+  z-index: 100;
 }
 #login-screen.active {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: flex-start !important;
-  padding: 40px 24px !important;
+  display: block;
   animation: fadeIn .25s ease both;
 }
 .login-bg {
-  position: fixed;
+  position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 0;
@@ -120,33 +122,28 @@ body {
   background: #C4825A;
   bottom: -60px; left: -60px;
 }
-/* Wrapper opcional — si está en el HTML ayuda */
+/*
+ * ESTE ES EL FLEX CONTAINER que centra la card.
+ * Ocupa 100% del ancho de #login-screen (que es 100vw) y al menos 100dvh de alto.
+ * justify-content:center + align-items:center = card perfectamente centrada.
+ */
 .login-panels {
-  width: 100%;
-  max-width: 400px;
-  flex-shrink: 0;
   position: relative;
   z-index: 1;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
 }
-/*
- * La card se centra SOLA por su propio max-width + margin:0 auto.
- * Esto funciona:
- *   a) Con .login-panels: la card es hijo de un bloque de 400px (ya centrado)
- *   b) Sin .login-panels: la card es hijo directo del flex container de 100vw,
- *      margin:0 auto la centra igualmente porque en flex-column el margen
- *      horizontal auto funciona como en block layout.
- */
 .login-card {
   background: rgba(250,247,242,.97);
   border-radius: var(--radius-xl);
   padding: 40px 32px 36px;
   width: 100%;
   max-width: 400px;
-  margin: 0 auto;
   box-shadow: var(--shadow-lg);
   animation: slideUp .5s cubic-bezier(.34,1.56,.64,1) both;
-  position: relative;
-  z-index: 1;
 }
 .login-card.hidden { display: none !important; }
 
@@ -3380,7 +3377,7 @@ input:checked + .switch-track-video { background: #3B82F6; }
 
 
 /* ═══════════════════════════════════════════════════════════════
-   HOLOS · Dashboard de Estadísticas (admin)
+   HOLOS · Dashboard de Estadísticas (admin) DEF
 ═══════════════════════════════════════════════════════════════ */
 
 /* Header de la página */
@@ -4438,7 +4435,7 @@ input:checked + .switch-track-video { background: #3B82F6; }
   transform: rotate(-45deg) translateY(-1px);
   display: block;
 }
-/* Resaltar tarjetas seleccionadas d */
+/* Resaltar tarjetas seleccionadas */
 .bulk-mode .alumno-card.bulk-selected {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
