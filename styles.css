@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════
    MABY MENTORÍAS — CSS Mobile-First
    Paleta: tierra cálida + verde salvia + crema
-   Tipografía: DM Serif Display + DM Sans 0.0.24
+   Tipografía: DM Serif Display + DM Sans 0.0.25
 ═══════════════════════════════════════════════ */
 
 /* ── Variables ── */
@@ -4414,9 +4414,9 @@ input:checked + .switch-track-video { background: #3B82F6; }
   transform: translateX(-50%);
   z-index: 300;
   width: min(600px, calc(100vw - 24px));
-  animation: slideUp .2s ease;
+  animation: bulkBarSlideUp .2s ease;
 }
-@keyframes slideUp {
+@keyframes bulkBarSlideUp {
   from { transform: translateX(-50%) translateY(20px); opacity: 0; }
   to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
 }
