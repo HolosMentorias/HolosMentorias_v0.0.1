@@ -4640,3 +4640,89 @@ input:checked + .switch-track-video { background: #3B82F6; }
   opacity: .5;
 }
 
+
+
+/* ═══════════════════════════════════════════════════════════════
+   HOLOS · Presencia en tiempo real (usuarios conectados)
+═══════════════════════════════════════════════════════════════ */
+
+/* Punto verde de "en línea" sobre el avatar en listas de usuarios */
+.user-row-avatar,
+.user-row-avatar-placeholder {
+  position: relative;
+}
+.online-dot {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #4CAF50;
+  border: 2px solid var(--bg-card);
+  box-shadow: 0 0 0 1px rgba(76,175,80,.3);
+}
+.online-dot.pulse {
+  animation: onlinePulse 2s ease-in-out infinite;
+}
+@keyframes onlinePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(76,175,80,.5); }
+  50%      { box-shadow: 0 0 0 4px rgba(76,175,80,0); }
+}
+
+/* Lista de conectados */
+.online-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.online-user-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.online-user-avatar,
+.online-user-avatar-placeholder {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+}
+.online-user-avatar { object-fit: cover; }
+.online-user-avatar-placeholder {
+  background: var(--bg-input);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--accent-dark);
+}
+.online-user-info { flex: 1; min-width: 0; }
+.online-user-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.online-user-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.online-role-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.online-role-super_admin { background: #FDEBD0; color: #A85D00; }
+.online-role-admin       { background: #D6EAF8; color: #1A5A8A; }
+.online-role-mentor      { background: var(--accent-light); color: var(--accent-dark); }
+

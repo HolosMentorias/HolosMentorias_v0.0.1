@@ -314,6 +314,11 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
           Backup
         </button>
+        <button class="nav-tab" data-view="super-conectados" data-role="super_admin">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></svg>
+          Conectados
+          <span class="nav-badge hidden" id="sup-online-badge">0</span>
+        </button>
         </div>
       </nav>
     </header>
@@ -696,6 +701,27 @@
         <div class="backup-note">
           <strong>⚠️ Importante:</strong> los mentores que se restauren como perfiles nuevos van a aparecer <strong>pausados (transparentes)</strong> en la lista de mentores hasta que los reactivés manualmente, para que puedas verificar que su acceso sigue siendo válido antes de dejarlos operar.
         </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════
+           VISTA SUPER ADMIN · "Conectados"
+           Presencia en tiempo real (Supabase Realtime Presence)
+      ═══════════════════════════════════════════════ -->
+      <section class="view hidden" data-view-pane="super-conectados">
+        <div class="backup-page-header">
+          <h2 class="section-title">Quién está conectado ahora</h2>
+          <p class="backup-subtitle">Se actualiza en tiempo real. Un usuario cuenta como conectado mientras tiene la app abierta y activa en su navegador.</p>
+        </div>
+
+        <section class="stats-row" style="margin-bottom:20px">
+          <div class="stat-card stat-active"><span class="stat-num" id="online-stat-total">0</span><span class="stat-label">Conectados ahora</span></div>
+          <div class="stat-card stat-active"><span class="stat-num" id="online-stat-admins">0</span><span class="stat-label">Admins</span></div>
+          <div class="stat-card stat-active"><span class="stat-num" id="online-stat-mentores">0</span><span class="stat-label">Mentores</span></div>
+        </section>
+
+        <section class="online-list" id="online-users-list">
+          <div class="empty-state"><span>💤</span><p>No hay nadie más conectado en este momento.</p></div>
+        </section>
       </section>
 
     </main>
@@ -1366,7 +1392,7 @@
 
   <!-- Footer de versión: fuera de todas las screens para que position:fixed funcione -->
   <footer class="app-version-footer">
-    Holos Mentorías · <span>v0.0.25</span>
+    Holos Mentorías · <span>v0.0.26</span>
   </footer>
 
   <!-- Config (inyectada por Cloudflare en build, ver README) -->

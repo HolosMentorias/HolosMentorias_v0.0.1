@@ -599,6 +599,10 @@ async function bootstrapSession() {
   configureNavForRole(prof.rol);
   showScreen('app-screen');
 
+  // Presencia en tiempo real: todos los roles se "anuncian" como
+  // conectados; solo el super_admin consulta esa lista para verla.
+  startPresenceTracking(prof);
+
   // Arrancar notificaciones globales de chat (activas toda la sesión,
   // independientemente de en qué pestaña esté el usuario)
   if (prof.rol !== 'super_admin') {
@@ -736,6 +740,7 @@ function switchView(viewId) {
   if (viewId === 'admin-mensajes')   loadChat('admin');
   if (viewId === 'admin-usuarios')   loadAdminUsuarios();
   if (viewId === 'super-usuarios')   loadSuperUsuarios();
+  if (viewId === 'super-conectados') { renderOnlineUsers(); }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -4716,6 +4721,144 @@ $('backup-import-confirm').onclick = async () => {
 
 $('backup-import-done').onclick = () => {
   $('modal-backup-import').classList.add('hidden');
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   PRESENCIA EN TIEMPO REAL (usuarios conectados)
+
+   Usa Supabase Realtime Presence: un canal compartido donde cada
+   sesión activa (admin, mentor, super_admin) se "anuncia" con
+   .track(). No se guarda nada en la base de datos — es puramente
+   en memoria mientras dura la conexión websocket.
+
+   Todos los roles se anuncian (para que el super_admin los vea),
+   pero solo el super_admin renderiza esa información en pantalla.
+═══════════════════════════════════════════════════════════════ */
+
+const presence = {
+  channel: null,
+  online: new Map(), // id → { nombre, apellido, rol, email, avatar_url, online_at }
+};
+
+function startPresenceTracking(profile) {
+  if (presence.channel) {
+    db.removeChannel(presence.channel);
+    presence.channel = null;
+  }
+
+  presence.channel = db.channel('holos-presence', {
+    config: { presence: { key: profile.id } }
+  });
+
+  presence.channel
+    .on('presence', { event: 'sync' }, () => {
+      const state_ = presence.channel.presenceState();
+      presence.online = new Map();
+      for (const key in state_) {
+        const entries = state_[key];
+        if (entries && entries.length) {
+          presence.online.set(key, entries[0]); // primera entrada (una por usuario)
+        }
+      }
+      // Si el super_admin está mirando la pestaña de conectados, refrescar
+      if (state.profile?.rol === 'super_admin') {
+        renderOnlineUsers();
+        renderOnlineDots();
+      }
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await presence.channel.track({
+          nombre: profile.nombre,
+          apellido: profile.apellido,
+          rol: profile.rol,
+          email: profile.email,
+          avatar_url: profile.avatar_url || null,
+          online_at: new Date().toISOString(),
+        });
+      }
+    });
+}
+
+/* ── Panel "Conectados" (super_admin) ── */
+
+function renderOnlineUsers() {
+  const list = $('online-users-list');
+  if (!list) return;
+
+  // Excluir al propio super_admin de la lista (no tiene sentido verse a sí mismo)
+  const otros = [...presence.online.entries()].filter(([id]) => id !== state.profile.id);
+
+  const admins   = otros.filter(([,u]) => u.rol === 'admin');
+  const mentores = otros.filter(([,u]) => u.rol === 'mentor');
+
+  $('online-stat-total').textContent    = otros.length;
+  $('online-stat-admins').textContent   = admins.length;
+  $('online-stat-mentores').textContent = mentores.length;
+
+  const badge = $('sup-online-badge');
+  if (badge) {
+    badge.textContent = otros.length;
+    badge.classList.toggle('hidden', otros.length === 0);
+  }
+
+  if (!otros.length) {
+    list.innerHTML = '<div class="empty-state"><span>💤</span><p>No hay nadie más conectado en este momento.</p></div>';
+    return;
+  }
+
+  // Ordenar: admins primero, después mentores, por nombre
+  const ordenados = [...admins, ...mentores].sort((a, b) => {
+    if (a[1].rol !== b[1].rol) return a[1].rol === 'admin' ? -1 : 1;
+    return fullName(a[1]).localeCompare(fullName(b[1]));
+  });
+
+  list.innerHTML = ordenados.map(([id, u]) => {
+    const rolLabel = { admin: 'Admin', mentor: 'Mentor', super_admin: 'Super admin' }[u.rol] || u.rol;
+    const av = u.avatar_url
+      ? `<img class="online-user-avatar" src="${escapeHtml(u.avatar_url)}" alt=""/><span class="online-dot pulse"></span>`
+      : `<div class="online-user-avatar-placeholder">${escapeHtml(initials(u))}<span class="online-dot pulse"></span></div>`;
+    const desde = u.online_at ? formatRelative(u.online_at) : '';
+    return `
+      <div class="online-user-row">
+        ${av}
+        <div class="online-user-info">
+          <div class="online-user-name">${escapeHtml(fullName(u))}</div>
+          <div class="online-user-meta">
+            <span class="online-role-badge online-role-${u.rol}">${rolLabel}</span>
+            ${desde ? `<span>conectado ${desde}</span>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/* ── Punto verde en las listas de Usuarios (super-usuarios / admin-usuarios) ── */
+
+function renderOnlineDots() {
+  $$('.user-row').forEach(row => {
+    const id = row.dataset.id;
+    const avatarEl = row.querySelector('.user-row-avatar, .user-row-avatar-placeholder');
+    if (!avatarEl) return;
+
+    // Quitar punto previo si existía
+    const prevDot = avatarEl.querySelector('.online-dot');
+    if (prevDot) prevDot.remove();
+
+    if (id !== state.profile.id && presence.online.has(id)) {
+      avatarEl.insertAdjacentHTML('beforeend', '<span class="online-dot pulse"></span>');
+    }
+  });
+}
+
+// Actualizar los puntos verdes cada vez que se re-renderiza la lista de usuarios
+// (renderSuperUsuarios / renderAdminUsuarios ya existen; enganchamos después de
+// que el DOM se actualice, con un pequeño delay para asegurar que ya se pintó)
+const _origRenderSuperUsuarios = renderSuperUsuarios;
+renderSuperUsuarios = function(...args) {
+  _origRenderSuperUsuarios.apply(this, args);
+  if (presence.channel) setTimeout(renderOnlineDots, 0);
 };
 
 /* ═══════════════════════════════════════════════════════════════
