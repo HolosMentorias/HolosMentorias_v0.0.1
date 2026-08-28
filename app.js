@@ -2295,13 +2295,26 @@ async function loadChat(role) {
 async function loadBroadcastMeta(role) {
   if (role === 'mentor') {
     const { data: convs } = await db.from('conversations')
-      .select('id, admin_id, last_message_at')
+      .select('id, admin_id')
       .eq('is_broadcast', true);
     chat.broadcastConvIds = new Set((convs || []).map(c => c.id));
-    chat.broadcastLastAt = (convs || []).reduce(
-      (max, c) => (c.last_message_at && c.last_message_at > (max || '')) ? c.last_message_at : max,
-      null
-    );
+
+    // Fix: no confiar en conversations.last_message_at (podía quedar
+    // desactualizado). Calculamos el preview directamente del último
+    // mensaje real, visible (no eliminado).
+    if (chat.broadcastConvIds.size) {
+      const { data: ultimo } = await db.from('messages')
+        .select('created_at')
+        .in('conversation_id', [...chat.broadcastConvIds])
+        .eq('eliminado', false)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      chat.broadcastLastAt = ultimo?.created_at || null;
+    } else {
+      chat.broadcastLastAt = null;
+    }
+
     const { data: count } = await db.rpc('count_unread_broadcasts');
     chat.broadcastUnreadCount = count || 0;
   } else {
@@ -2311,7 +2324,20 @@ async function loadBroadcastMeta(role) {
       .eq('is_broadcast', true)
       .maybeSingle();
     chat.adminBroadcastConvId  = conv?.id || null;
-    chat.adminBroadcastLastAt  = conv?.last_message_at || null;
+
+    // Mismo fix para el admin: preview desde el último mensaje propio real.
+    if (chat.adminBroadcastConvId) {
+      const { data: ultimo } = await db.from('messages')
+        .select('created_at')
+        .eq('conversation_id', chat.adminBroadcastConvId)
+        .eq('eliminado', false)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      chat.adminBroadcastLastAt = ultimo?.created_at || null;
+    } else {
+      chat.adminBroadcastLastAt = null;
+    }
   }
 }
 
