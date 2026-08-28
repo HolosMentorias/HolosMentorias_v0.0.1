@@ -4763,13 +4763,6 @@ input:checked + .switch-track-video { background: #3B82F6; }
 .msg-action-btn:hover { background: var(--accent-light); color: var(--accent-dark); border-color: var(--accent); }
 .msg-delete-btn:hover { background: #FBEAEA; color: #B85450; border-color: #B85450; }
 
-/* Mensaje eliminado */
-.msg-bubble.msg-deleted {
-  opacity: .6;
-  font-style: italic;
-}
-.msg-bubble.msg-deleted em { color: var(--text-muted); }
-
 /* Etiqueta "(editado)" */
 .msg-edited-tag {
   font-size: 10px;

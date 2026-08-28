@@ -2574,8 +2574,9 @@ function renderMessages() {
   if (!container) return;
   container.innerHTML = '';
 
+  const visibles = chat.messages.filter(m => !m.eliminado);
   let lastDay = '';
-  for (const m of chat.messages) {
+  for (const m of visibles) {
     const d = new Date(m.created_at);
     const dayKey = d.toLocaleDateString('es-AR');
     if (dayKey !== lastDay) {
@@ -2599,15 +2600,8 @@ function renderMessages() {
    hilo de broadcast del admin. "context" identifica desde dónde
    se llama, para saber cómo refrescar tras editar/eliminar. */
 function renderMsgBubbleHtml(m, fromMe, hh, context, extraClass = '', remitenteLabel = null) {
-  if (m.eliminado) {
-    return `
-      <div class="msg-bubble ${fromMe ? 'from-me' : 'from-them'} ${extraClass} msg-deleted" data-msg-id="${m.id}">
-        ${remitenteLabel ? `<div class="msg-broadcast-sender">📢 ${escapeHtml(remitenteLabel)}</div>` : ''}
-        <em>Mensaje eliminado</em>
-        <span class="msg-time">${hh}</span>
-      </div>
-    `;
-  }
+  // Un mensaje eliminado simplemente no se pinta: desaparece de la vista.
+  if (m.eliminado) return '';
 
   const isEditing = msgEditingIds.has(m.id);
   const editedTag = m.editado_at ? ' <span class="msg-edited-tag">(editado)</span>' : '';
@@ -3191,13 +3185,14 @@ async function openAnunciosMentor() {
 function renderAnunciosFeed(msgs, senderMap) {
   const cont = $('chat-messages');
   if (!cont) return;
-  if (!msgs.length) {
+  const visibles = (msgs || []).filter(m => !m.eliminado);
+  if (!visibles.length) {
     cont.innerHTML = '<div class="empty-state" style="padding:30px"><span>📢</span><p>Todavía no hay anuncios.</p></div>';
     return;
   }
   cont.innerHTML = '';
   let lastDay = '';
-  for (const m of msgs) {
+  for (const m of visibles) {
     const d = new Date(m.created_at);
     const dayKey = d.toLocaleDateString('es-AR');
     if (dayKey !== lastDay) {
@@ -3284,13 +3279,14 @@ async function openBroadcastAdminThread() {
 function renderBroadcastAdminMessages(msgs) {
   const cont = $('chat-messages');
   if (!cont) return;
-  if (!msgs.length) {
+  const visibles = (msgs || []).filter(m => !m.eliminado);
+  if (!visibles.length) {
     cont.innerHTML = '<div class="empty-state" style="padding:30px"><span>📢</span><p>Todavía no enviaste ningún mensaje global.</p></div>';
     return;
   }
   cont.innerHTML = '';
   let lastDay = '';
-  for (const m of msgs) {
+  for (const m of visibles) {
     const d = new Date(m.created_at);
     const dayKey = d.toLocaleDateString('es-AR');
     if (dayKey !== lastDay) {
