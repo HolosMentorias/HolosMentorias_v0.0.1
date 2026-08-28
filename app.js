@@ -2425,6 +2425,11 @@ function renderChatSidebar(role) {
             <div class="chat-item-preview">${conv?.last_message_at ? 'Última actividad: ' + formatRelative(conv.last_message_at) : 'Sin mensajes'}</div>
           </div>
           ${unread > 0 ? `<span class="chat-item-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
+          ${(role === 'admin' && conv) ? `
+            <button class="chat-item-delete-btn" data-conv-id="${conv.id}" data-peer-name="${escapeHtml(fullName(peer))}" title="Eliminar conversación">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14a2,2,0,0,1-2,2H8a2,2,0,0,1-2-2L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/></svg>
+            </button>
+          ` : ''}
         </div>
       `);
     }
@@ -2432,6 +2437,13 @@ function renderChatSidebar(role) {
 
   $$('.chat-item:not(.chat-item-pinned)', sidebarList).forEach(el => {
     el.onclick = () => openConversation(role, el.dataset.peerId);
+  });
+
+  $$('.chat-item-delete-btn', sidebarList).forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      abrirEliminarConversacion(btn.dataset.convId, btn.dataset.peerName, role);
+    };
   });
 
   // Bind del pinned item
@@ -3175,6 +3187,14 @@ async function openAnunciosMentor() {
 
   renderAnunciosFeed(msgs || [], senderMap);
 
+  // Fix: mantener el preview del sidebar ("Anuncios · hace X") sincronizado
+  // con el mensaje visible más reciente (ignorando eliminados), en vez de
+  // depender de conversations.last_message_at que puede no estar sincronizado.
+  const visiblesOrdenados = (msgs || []).filter(m => !m.eliminado);
+  if (visiblesOrdenados.length) {
+    chat.broadcastLastAt = visiblesOrdenados[visiblesOrdenados.length - 1].created_at;
+  }
+
   // Marcar todos como leídos de una — más eficiente que uno por uno
   await db.rpc('mark_all_broadcasts_read');
   chat.broadcastUnreadCount = 0;
@@ -3228,6 +3248,10 @@ async function refreshAnunciosFeed() {
     senderMap = new Map((senders || []).map(s => [s.id, s]));
   }
   renderAnunciosFeed(msgs || [], senderMap);
+
+  const visibles = (msgs || []).filter(m => !m.eliminado);
+  chat.broadcastLastAt = visibles.length ? visibles[visibles.length - 1].created_at : null;
+  renderChatSidebar('mentor');
 }
 
 /* ── ADMIN: historial de mis propios mensajes globales ── */
@@ -5043,6 +5067,85 @@ const _origRenderSuperUsuarios = renderSuperUsuarios;
 renderSuperUsuarios = function(...args) {
   _origRenderSuperUsuarios.apply(this, args);
   if (presence.channel) setTimeout(renderOnlineDots, 0);
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   ELIMINAR CONVERSACIÓN (chat 1-a-1) — solo admin/super_admin
+   Doble paso de confirmación, igual criterio que eliminar alumno.
+   Borra la conversación y sus mensajes de forma PERMANENTE en
+   Supabase (no es soft-delete, a diferencia del resto de la app).
+═══════════════════════════════════════════════════════════════ */
+
+const chatDeleteState = { convId: null, role: null };
+
+function abrirEliminarConversacion(convId, peerName, role) {
+  chatDeleteState.convId = convId;
+  chatDeleteState.role = role;
+
+  $('chatdel-peer-name').textContent = peerName;
+  $('chatdel-step-1').classList.remove('hidden');
+  $('chatdel-step-2').classList.add('hidden');
+  $('chatdel-input').value = '';
+  $('chatdel-error').classList.add('hidden');
+  $('chatdel-next').textContent = 'Continuar';
+  $('modal-confirm-delete-chat').classList.remove('hidden');
+}
+
+$('chatdel-close').onclick  = () => $('modal-confirm-delete-chat').classList.add('hidden');
+$('chatdel-cancel').onclick = () => $('modal-confirm-delete-chat').classList.add('hidden');
+
+$('chatdel-next').onclick = async () => {
+  // Paso 1 → paso 2
+  if ($('chatdel-step-1').classList.contains('hidden') === false) {
+    $('chatdel-step-1').classList.add('hidden');
+    $('chatdel-step-2').classList.remove('hidden');
+    $('chatdel-next').textContent = 'Eliminar definitivamente';
+    setTimeout(() => $('chatdel-input').focus(), 50);
+    return;
+  }
+
+  // Paso 2 → validar palabra y ejecutar
+  const palabra = ($('chatdel-input').value || '').trim().toUpperCase();
+  const err = $('chatdel-error');
+  if (palabra !== 'ELIMINAR') {
+    err.textContent = 'Escribí la palabra ELIMINAR para confirmar.';
+    err.classList.remove('hidden');
+    $('chatdel-input').focus();
+    return;
+  }
+  err.classList.add('hidden');
+
+  const btn = $('chatdel-next');
+  btn.disabled = true;
+  btn.textContent = 'Eliminando...';
+
+  const convId = chatDeleteState.convId;
+  const { error } = await db.from('conversations').delete().eq('id', convId);
+
+  btn.disabled = false;
+  btn.textContent = 'Eliminar definitivamente';
+
+  if (error) {
+    err.textContent = 'Error al eliminar: ' + error.message;
+    err.classList.remove('hidden');
+    return;
+  }
+
+  $('modal-confirm-delete-chat').classList.add('hidden');
+  toast('✓ Conversación eliminada');
+
+  const role = chatDeleteState.role;
+
+  // Limpiar estado local
+  chat.conversations = chat.conversations.filter(c => String(c.id) !== String(convId));
+  delete chat.unread[convId];
+  if (chat.active && String(chat.active.id) === String(convId)) {
+    chat.active = null;
+    renderChatMain(role);
+    document.querySelector(`[data-chat-context="${role}"]`)?.classList.remove('has-active');
+  }
+  updateBadge(role);
+  renderChatSidebar(role);
 };
 
 /* ═══════════════════════════════════════════════════════════════

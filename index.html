@@ -995,6 +995,47 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════
+       MODAL · Confirmación de eliminación de CONVERSACIÓN (chat)
+       Doble paso, igual criterio que eliminar alumno.
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay hidden" id="modal-confirm-delete-chat">
+    <div class="modal-card modal-card-small">
+      <div class="modal-header">
+        <h2>Eliminar conversación</h2>
+        <button class="btn-icon" id="chatdel-close" aria-label="Cerrar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- Paso 1 -->
+        <div id="chatdel-step-1">
+          <div class="confirm-icon">⚠️</div>
+          <p class="confirm-text">
+            Vas a eliminar la conversación con <strong id="chatdel-peer-name">—</strong>.
+          </p>
+          <p class="confirm-hint">
+            Esto borra <strong>todos los mensajes</strong> de esa conversación de forma
+            <strong>permanente</strong> en la base de datos. No se puede deshacer.
+          </p>
+        </div>
+        <!-- Paso 2 -->
+        <div id="chatdel-step-2" class="hidden">
+          <div class="confirm-icon">🛑</div>
+          <p class="confirm-text">
+            <strong>Confirmación final.</strong> Escribí <code>ELIMINAR</code> abajo para confirmar.
+          </p>
+          <input type="text" id="chatdel-input" placeholder="ELIMINAR" autocomplete="off" autocapitalize="characters" />
+          <p id="chatdel-error" class="error-msg hidden"></p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="chatdel-cancel">Cancelar</button>
+        <button class="btn-danger" id="chatdel-next">Continuar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
        MODAL · Elegir mentor para iniciar chat (admin)
   ═══════════════════════════════════════════════════════════ -->
   <div class="modal-overlay hidden" id="modal-pick-mentor">
@@ -1392,7 +1433,7 @@
 
   <!-- Footer de versión: fuera de todas las screens para que position:fixed funcione -->
   <footer class="app-version-footer">
-    Holos Mentorías · <span>v0.0.27</span>
+    Holos Mentorías · <span>v0.0.28</span>
   </footer>
 
   <!-- Config (inyectada por Cloudflare en build, ver README) -->

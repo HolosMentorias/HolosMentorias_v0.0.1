@@ -4810,3 +4810,30 @@ input:checked + .switch-track-video { background: #3B82F6; }
 }
 .btn-mini-save:hover { background: var(--accent-dark); }
 
+
+
+/* ═══════════════════════════════════════════════════════════════
+   HOLOS · Eliminar conversación (chat) desde el sidebar del admin
+═══════════════════════════════════════════════════════════════ */
+
+.chat-item {
+  position: relative;
+}
+.chat-item-delete-btn {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: var(--transition);
+}
+.chat-item:hover .chat-item-delete-btn { opacity: 1; }
+.chat-item-delete-btn:hover {
+  background: #FBEAEA;
+  color: #B85450;
+}
+
