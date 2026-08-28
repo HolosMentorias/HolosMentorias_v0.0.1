@@ -2495,7 +2495,7 @@ async function loadMessages() {
   if (!chat.active) return;
   const { data, error } = await db
     .from('messages')
-    .select('id, conversation_id, sender_id, body, created_at, read_at')
+    .select('id, conversation_id, sender_id, body, created_at, read_at, eliminado, editado_at')
     .eq('conversation_id', chat.active.id)
     .order('created_at', { ascending: true })
     .limit(500);
@@ -2587,15 +2587,152 @@ function renderMessages() {
     }
     const fromMe = m.sender_id === state.profile.id;
     const hh = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
-    container.insertAdjacentHTML('beforeend', `
-      <div class="msg-bubble ${fromMe ? 'from-me' : 'from-them'}">
-        ${escapeHtml(m.body).replace(/\n/g, '<br/>')}
-        <span class="msg-time">${hh}</span>
-      </div>
-    `);
+    container.insertAdjacentHTML('beforeend', renderMsgBubbleHtml(m, fromMe, hh, 'chat'));
   }
   // scroll al final
   requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+  bindMsgActions(container, 'chat');
+}
+
+/* ── Burbuja de mensaje con soporte de editar/eliminar ──
+   Reutilizada por chat 1-a-1, feed de anuncios (mentor) y el
+   hilo de broadcast del admin. "context" identifica desde dónde
+   se llama, para saber cómo refrescar tras editar/eliminar. */
+function renderMsgBubbleHtml(m, fromMe, hh, context, extraClass = '', remitenteLabel = null) {
+  if (m.eliminado) {
+    return `
+      <div class="msg-bubble ${fromMe ? 'from-me' : 'from-them'} ${extraClass} msg-deleted" data-msg-id="${m.id}">
+        ${remitenteLabel ? `<div class="msg-broadcast-sender">📢 ${escapeHtml(remitenteLabel)}</div>` : ''}
+        <em>Mensaje eliminado</em>
+        <span class="msg-time">${hh}</span>
+      </div>
+    `;
+  }
+
+  const isEditing = msgEditingIds.has(m.id);
+  const editedTag = m.editado_at ? ' <span class="msg-edited-tag">(editado)</span>' : '';
+  const actions = (fromMe && !isEditing) ? `
+    <div class="msg-actions">
+      <button class="msg-action-btn msg-edit-btn" data-msg-id="${m.id}" data-context="${context}" title="Editar">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </button>
+      <button class="msg-action-btn msg-delete-btn" data-msg-id="${m.id}" data-context="${context}" title="Eliminar">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14a2,2,0,0,1-2,2H8a2,2,0,0,1-2-2L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/></svg>
+      </button>
+    </div>` : '';
+
+  if (isEditing) {
+    return `
+      <div class="msg-bubble ${fromMe ? 'from-me' : 'from-them'} ${extraClass} msg-editing" data-msg-id="${m.id}">
+        ${remitenteLabel ? `<div class="msg-broadcast-sender">📢 ${escapeHtml(remitenteLabel)}</div>` : ''}
+        <textarea class="msg-edit-textarea" data-msg-id="${m.id}">${escapeHtml(m.body)}</textarea>
+        <div class="msg-edit-actions">
+          <button class="btn-mini-cancel msg-edit-cancel" data-msg-id="${m.id}" data-context="${context}">Cancelar</button>
+          <button class="btn-mini-save msg-edit-save" data-msg-id="${m.id}" data-context="${context}">Guardar</button>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="msg-bubble ${fromMe ? 'from-me' : 'from-them'} ${extraClass}" data-msg-id="${m.id}">
+      ${actions}
+      ${remitenteLabel ? `<div class="msg-broadcast-sender">📢 ${escapeHtml(remitenteLabel)}</div>` : ''}
+      ${escapeHtml(m.body).replace(/\n/g, '<br/>')}
+      <span class="msg-time">${hh}${editedTag}</span>
+    </div>
+  `;
+}
+
+// IDs de mensajes actualmente en modo edición (por instancia de app)
+const msgEditingIds = new Set();
+
+// Bindea los botones de editar/eliminar/guardar/cancelar dentro de un contenedor
+function bindMsgActions(container, context) {
+  $$('.msg-edit-btn', container).forEach(btn => {
+    btn.onclick = () => {
+      msgEditingIds.add(btn.dataset.msgId);
+      refreshMsgContext(context);
+    };
+  });
+  $$('.msg-edit-cancel', container).forEach(btn => {
+    btn.onclick = () => {
+      msgEditingIds.delete(btn.dataset.msgId);
+      refreshMsgContext(context);
+    };
+  });
+  $$('.msg-edit-save', container).forEach(btn => {
+    btn.onclick = () => saveEditedMessage(btn.dataset.msgId, context);
+  });
+  $$('.msg-delete-btn', container).forEach(btn => {
+    btn.onclick = () => deleteOwnMessage(btn.dataset.msgId, context);
+  });
+  // Enter (sin shift) guarda; Escape cancela
+  $$('.msg-edit-textarea', container).forEach(ta => {
+    ta.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEditedMessage(ta.dataset.msgId, context); }
+      if (e.key === 'Escape') { msgEditingIds.delete(ta.dataset.msgId); refreshMsgContext(context); }
+    });
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  });
+}
+
+// Re-renderiza el contexto correspondiente después de editar/cancelar/eliminar
+function refreshMsgContext(context) {
+  if (context === 'chat') { renderMessages(); return; }
+  if (context === 'anuncios') { refreshAnunciosFeed(); return; }
+  if (context === 'broadcast-admin') { refreshBroadcastAdminThread(); return; }
+}
+
+async function saveEditedMessage(msgId, context) {
+  const ta = document.querySelector(`.msg-edit-textarea[data-msg-id="${msgId}"]`);
+  if (!ta) return;
+  const nuevoBody = ta.value.trim();
+  if (!nuevoBody) { toast('El mensaje no puede quedar vacío', 'error'); return; }
+  if (nuevoBody.length > 4000) { toast('Mensaje demasiado largo (máx 4000 caracteres)', 'error'); return; }
+
+  const idNum = isNaN(+msgId) ? msgId : +msgId;
+  const { error } = await db.from('messages')
+    .update({ body: nuevoBody, editado_at: new Date().toISOString() })
+    .eq('id', idNum)
+    .eq('sender_id', state.profile.id); // doble seguridad además de RLS
+
+  if (error) {
+    toast('No se pudo editar: ' + error.message, 'error');
+    return;
+  }
+
+  msgEditingIds.delete(msgId);
+
+  // Actualizar cache local según contexto
+  if (context === 'chat') {
+    const m = chat.messages.find(x => String(x.id) === String(msgId));
+    if (m) { m.body = nuevoBody; m.editado_at = new Date().toISOString(); }
+  }
+  refreshMsgContext(context);
+}
+
+async function deleteOwnMessage(msgId, context) {
+  if (!confirm('¿Eliminar este mensaje? Esta acción no se puede deshacer.')) return;
+
+  const idNum = isNaN(+msgId) ? msgId : +msgId;
+  const { error } = await db.from('messages')
+    .update({ eliminado: true, editado_at: new Date().toISOString() })
+    .eq('id', idNum)
+    .eq('sender_id', state.profile.id); // doble seguridad además de RLS
+
+  if (error) {
+    toast('No se pudo eliminar: ' + error.message, 'error');
+    return;
+  }
+
+  if (context === 'chat') {
+    const m = chat.messages.find(x => String(x.id) === String(msgId));
+    if (m) m.eliminado = true;
+  }
+  refreshMsgContext(context);
+  toast('Mensaje eliminado');
 }
 
 async function sendMessage(role) {
@@ -2684,6 +2821,35 @@ function subscribeRealtime(role) {
 
       conv.last_message_at = m.created_at;
       renderChatSidebar(role);
+    })
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'messages'
+    }, async (payload) => {
+      const m = payload.new;
+
+      // Chat 1-a-1 actualmente abierto: parchear el mensaje editado/eliminado
+      if (chat.active && chat.active.id === m.conversation_id) {
+        const idx = chat.messages.findIndex(x => x.id === m.id);
+        if (idx >= 0) {
+          chat.messages[idx] = { ...chat.messages[idx], ...m };
+          renderMessages();
+        }
+        return;
+      }
+
+      // Mentor mirando el feed de anuncios: refrescar si es un broadcast
+      if (chat.viewingAnuncios && chat.broadcastConvIds.has(m.conversation_id)) {
+        refreshAnunciosFeed();
+        return;
+      }
+
+      // Admin mirando su propio hilo de broadcasts
+      if (chat.viewingAdminBroadcast && m.conversation_id === chat.adminBroadcastConvId) {
+        refreshBroadcastAdminThread();
+        return;
+      }
     })
     .subscribe();
 }
@@ -2994,7 +3160,7 @@ async function openAnunciosMentor() {
   }
 
   const { data: msgs, error } = await db.from('messages')
-    .select('id, conversation_id, sender_id, body, created_at, remitente_label')
+    .select('id, conversation_id, sender_id, body, created_at, remitente_label, eliminado, editado_at')
     .in('conversation_id', ids)
     .order('created_at', { ascending: true })
     .limit(300);
@@ -3043,15 +3209,30 @@ function renderAnunciosFeed(msgs, senderMap) {
     }
     const hh = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
     const remitente = m.remitente_label || fullName(senderMap.get(m.sender_id)) || 'Administración';
-    cont.insertAdjacentHTML('beforeend', `
-      <div class="msg-bubble from-them msg-bubble-broadcast">
-        <div class="msg-broadcast-sender">📢 ${escapeHtml(remitente)}</div>
-        ${escapeHtml(m.body).replace(/\n/g, '<br/>')}
-        <span class="msg-time">${hh}</span>
-      </div>
-    `);
+    // fromMe siempre false acá: el mentor nunca es remitente de un broadcast, así que nunca ve controles.
+    cont.insertAdjacentHTML('beforeend', renderMsgBubbleHtml(m, false, hh, 'anuncios', 'msg-bubble-broadcast', remitente));
   }
   requestAnimationFrame(() => { cont.scrollTop = cont.scrollHeight; });
+}
+
+// Vuelve a pedir y renderizar el feed de anuncios (usado tras un evento
+// realtime de UPDATE mientras el mentor está mirando esta pestaña)
+async function refreshAnunciosFeed() {
+  const ids = [...chat.broadcastConvIds];
+  if (!ids.length) return;
+  const { data: msgs } = await db.from('messages')
+    .select('id, conversation_id, sender_id, body, created_at, remitente_label, eliminado, editado_at')
+    .in('conversation_id', ids)
+    .order('created_at', { ascending: true })
+    .limit(300);
+  const senderIds = [...new Set((msgs || []).map(m => m.sender_id))];
+  let senderMap = new Map();
+  if (senderIds.length) {
+    const { data: senders } = await db.from('profiles')
+      .select('id,nombre,apellido,email').in('id', senderIds);
+    senderMap = new Map((senders || []).map(s => [s.id, s]));
+  }
+  renderAnunciosFeed(msgs || [], senderMap);
 }
 
 /* ── ADMIN: historial de mis propios mensajes globales ── */
@@ -3091,7 +3272,7 @@ async function openBroadcastAdminThread() {
 
   if (chat.adminBroadcastConvId) {
     const { data } = await db.from('messages')
-      .select('id, sender_id, body, created_at, remitente_label')
+      .select('id, sender_id, body, created_at, remitente_label, eliminado, editado_at')
       .eq('conversation_id', chat.adminBroadcastConvId)
       .order('created_at', { ascending: true });
     renderBroadcastAdminMessages(data || []);
@@ -3120,15 +3301,22 @@ function renderBroadcastAdminMessages(msgs) {
       lastDay = dayKey;
     }
     const hh = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
-    cont.insertAdjacentHTML('beforeend', `
-      <div class="msg-bubble from-me msg-bubble-broadcast">
-        <div class="msg-broadcast-sender">📢 ${escapeHtml(m.remitente_label || 'Administración')}</div>
-        ${escapeHtml(m.body).replace(/\n/g, '<br/>')}
-        <span class="msg-time">${hh}</span>
-      </div>
-    `);
+    // fromMe siempre true acá: es el propio historial de broadcasts del admin.
+    cont.insertAdjacentHTML('beforeend', renderMsgBubbleHtml(m, true, hh, 'broadcast-admin', 'msg-bubble-broadcast', m.remitente_label || 'Administración'));
   }
   requestAnimationFrame(() => { cont.scrollTop = cont.scrollHeight; });
+  bindMsgActions(cont, 'broadcast-admin');
+}
+
+// Vuelve a pedir y renderizar el hilo de broadcasts del admin (usado tras
+// un evento realtime de UPDATE mientras está mirando esta pestaña)
+async function refreshBroadcastAdminThread() {
+  if (!chat.adminBroadcastConvId) return;
+  const { data } = await db.from('messages')
+    .select('id, sender_id, body, created_at, remitente_label, eliminado, editado_at')
+    .eq('conversation_id', chat.adminBroadcastConvId)
+    .order('created_at', { ascending: true });
+  renderBroadcastAdminMessages(data || []);
 }
 
 /* ── ADMIN: modal de composición del mensaje global ── */
@@ -3209,7 +3397,7 @@ $('broadcast-send').onclick = async () => {
   // Si estoy viendo el thread de broadcast, refrescarlo
   if (chat.viewingAdminBroadcast) {
     const { data: msgs } = await db.from('messages')
-      .select('id, sender_id, body, created_at, remitente_label')
+      .select('id, sender_id, body, created_at, remitente_label, eliminado, editado_at')
       .eq('conversation_id', convId)
       .order('created_at', { ascending: true });
     renderBroadcastAdminMessages(msgs || []);

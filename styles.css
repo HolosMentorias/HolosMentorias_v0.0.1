@@ -4726,3 +4726,94 @@ input:checked + .switch-track-video { background: #3B82F6; }
 .online-role-admin       { background: #D6EAF8; color: #1A5A8A; }
 .online-role-mentor      { background: var(--accent-light); color: var(--accent-dark); }
 
+
+
+/* ═══════════════════════════════════════════════════════════════
+   HOLOS · Editar / eliminar mensajes propios
+═══════════════════════════════════════════════════════════════ */
+
+.msg-bubble { position: relative; }
+
+/* Botones de acción: aparecen al hacer hover sobre burbujas propias */
+.msg-actions {
+  position: absolute;
+  top: -12px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity .15s ease;
+  pointer-events: none;
+}
+.msg-bubble:hover .msg-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.msg-action-btn {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+}
+.msg-action-btn:hover { background: var(--accent-light); color: var(--accent-dark); border-color: var(--accent); }
+.msg-delete-btn:hover { background: #FBEAEA; color: #B85450; border-color: #B85450; }
+
+/* Mensaje eliminado */
+.msg-bubble.msg-deleted {
+  opacity: .6;
+  font-style: italic;
+}
+.msg-bubble.msg-deleted em { color: var(--text-muted); }
+
+/* Etiqueta "(editado)" */
+.msg-edited-tag {
+  font-size: 10px;
+  opacity: .7;
+  font-style: italic;
+}
+
+/* Modo edición inline */
+.msg-bubble.msg-editing { padding-top: 10px; }
+.msg-edit-textarea {
+  width: 100%;
+  min-height: 50px;
+  resize: vertical;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+.msg-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+.btn-mini-cancel, .btn-mini-save {
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-weight: 600;
+  border: none;
+}
+.btn-mini-cancel {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.btn-mini-save {
+  background: var(--accent);
+  color: white;
+}
+.btn-mini-save:hover { background: var(--accent-dark); }
+
