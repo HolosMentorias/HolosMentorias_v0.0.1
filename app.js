@@ -1237,11 +1237,9 @@ function openAlumnoForm(alumnoId) {
     } else if (isAdmin && estaEliminado) {
       $('btn-restaurar-alumno').classList.remove('hidden');
       $('btn-restaurar-alumno').dataset.id = a.id;
-    } else if (isMentor && a.baja && !estaEliminado) {
-      // El mentor también puede reactivar a su propio alumno de baja
-      $('btn-habilitar-alumno').classList.remove('hidden');
-      $('btn-habilitar-alumno').dataset.id = a.id;
     }
+    // El botón "Habilitar" es exclusivo de admin/super_admin.
+    // Los mentores nunca pueden reactivar un alumno de baja.
   } else {
     $('modal-title').textContent = 'Nuevo alumno';
     ['form-nombre','form-apellido','form-numero-alumno','form-situacion',
@@ -1260,6 +1258,21 @@ function openAlumnoForm(alumnoId) {
     el.disabled = estaEliminado;
   });
   $('btn-save').classList.toggle('hidden', estaEliminado);
+
+  // Los mentores no pueden tocar los "Datos personales" del alumno.
+  // Sólo pueden usar Seguimiento, Inquietudes y Seguimiento del mentor.
+  // (defensa doble: además está bloqueado a nivel de base de datos
+  // por un trigger, ver migración 16)
+  const CAMPOS_DATOS_PERSONALES = [
+    'form-nombre', 'form-apellido', 'form-numero-alumno',
+    'form-situacion', 'form-comision', 'form-telefono', 'form-email',
+  ];
+  if (isMentor && !estaEliminado) {
+    CAMPOS_DATOS_PERSONALES.forEach(id => {
+      const el = $(id);
+      if (el) el.disabled = true;
+    });
+  }
 }
 
 $('modal-close').onclick = () => $('modal-form').classList.add('hidden');
@@ -1691,6 +1704,118 @@ async function exportarInformeMentor(mentorId) {
 
 // Botón PDF de la vista del propio mentor (informe propio)
 $('btn-export-pdf').onclick = () => exportarInformeMentor(state.profile.id);
+
+/* ─── INFORME GENERAL (admin/super_admin) ───
+   Un solo PDF con TODOS los alumnos de TODOS los mentores,
+   agrupados por mentor, incluyendo su estado (Activa/Baja) y el
+   detalle completo de inquietudes + seguimiento que cada mentor
+   fue cargando. Excluye alumnos eliminados (soft-delete).
+*/
+async function exportarInformeGeneral() {
+  toast('Generando informe general...');
+
+  const [aRes, mRes] = await Promise.all([
+    db.from('alumnos').select('*').eq('eliminado', false).order('apellido'),
+    db.from('profiles').select('id,nombre,apellido,email').eq('rol', 'mentor').order('apellido'),
+  ]);
+
+  if (aRes.error || mRes.error) { toast('Error al generar el informe', 'error'); return; }
+
+  const alumnos  = aRes.data || [];
+  const mentores = mRes.data || [];
+  const mentorMap = new Map(mentores.map(m => [m.id, m]));
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+
+  const totalBajas   = alumnos.filter(a => a.baja).length;
+  const totalSinAsig = alumnos.filter(a => !a.mentor_id).length;
+
+  // Encabezado
+  doc.setFont('helvetica','bold'); doc.setFontSize(18);
+  doc.setTextColor('#2C2417');
+  doc.text('Holos Mentorías — Informe general', 40, 50);
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  doc.setTextColor('#7A6E62');
+  doc.text(`Generado: ${new Date().toLocaleString('es-AR')}`, 40, 70);
+  doc.text(`Total de alumnos: ${alumnos.length}   ·   De baja: ${totalBajas}   ·   Sin asignar: ${totalSinAsig}   ·   Mentores: ${mentores.length}`, 40, 86);
+
+  // Tabla resumen: todos los alumnos, columna de mentor incluida
+  const filasOrdenadas = [...alumnos].sort((a, b) => {
+    const nombreMentorA = a.mentor_id ? fullName(mentorMap.get(a.mentor_id)) : 'zzz Sin asignar';
+    const nombreMentorB = b.mentor_id ? fullName(mentorMap.get(b.mentor_id)) : 'zzz Sin asignar';
+    if (nombreMentorA !== nombreMentorB) return nombreMentorA.localeCompare(nombreMentorB);
+    return (a.apellido || '').localeCompare(b.apellido || '');
+  });
+
+  const rows = filasOrdenadas.map(a => [
+    a.mentor_id ? fullName(mentorMap.get(a.mentor_id)) : 'Sin asignar',
+    `${a.apellido}, ${a.nombre}`,
+    a.telefono || '—',
+    formatDate(a.fecha_ultimo),
+    a.respondio || '—',
+    a.baja ? 'Baja' : (a.activa ? 'Activa' : 'Pausa'),
+  ]);
+
+  doc.autoTable({
+    startY: 104,
+    head: [['Mentor','Alumno','Teléfono','Últ. contacto','Respondió','Estado']],
+    body: rows,
+    headStyles: { fillColor: [107,154,100], textColor: 255 },
+    styles: { fontSize: 8.5, cellPadding: 4 },
+    alternateRowStyles: { fillColor: [250,247,242] },
+    didParseCell: (data) => {
+      // Resaltar en la tabla las filas de alumnos de baja
+      if (data.section === 'body' && data.row.raw[5] === 'Baja') {
+        data.cell.styles.textColor = '#B85450';
+      }
+    },
+  });
+
+  // Detalle por alumno, agrupado por mentor (inquietudes + seguimiento)
+  let y = doc.lastAutoTable.finalY + 30;
+  let mentorActual = null;
+
+  for (const a of filasOrdenadas) {
+    const nombreMentor = a.mentor_id ? fullName(mentorMap.get(a.mentor_id)) : 'Sin asignar';
+
+    if (nombreMentor !== mentorActual) {
+      mentorActual = nombreMentor;
+      if (y > 700) { doc.addPage(); y = 50; }
+      doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor('#2C2417');
+      doc.text(`Mentor: ${mentorActual}`, 40, y); y += 18;
+    }
+
+    if (!a.inquietudes && !a.seguimiento) continue; // sin detalle que mostrar, no ocupar espacio
+
+    if (y > 740) { doc.addPage(); y = 50; }
+    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor('#4E7848');
+    const estadoTag = a.baja ? '  [DE BAJA]' : '';
+    doc.text(`${a.apellido}, ${a.nombre}${estadoTag}`, 50, y); y += 15;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor('#2C2417');
+
+    if (a.inquietudes) {
+      doc.setFont('helvetica','bold'); doc.text('Inquietudes:', 50, y); y += 13;
+      doc.setFont('helvetica','normal');
+      const lines = doc.splitTextToSize(a.inquietudes, 500);
+      doc.text(lines, 50, y); y += lines.length * 11 + 5;
+    }
+    if (a.seguimiento) {
+      if (y > 740) { doc.addPage(); y = 50; }
+      doc.setFont('helvetica','bold'); doc.text('Seguimiento:', 50, y); y += 13;
+      doc.setFont('helvetica','normal');
+      const lines = doc.splitTextToSize(a.seguimiento, 500);
+      doc.text(lines, 50, y); y += lines.length * 11 + 10;
+    }
+    y += 6;
+  }
+
+  doc.save(`informe-general-holos-${new Date().toISOString().slice(0,10)}.pdf`);
+  toast('Informe general generado ✓');
+}
+
+$('btn-informe-general').onclick = () => exportarInformeGeneral();
 
 /* ═══════════════════════════════════════════════════════════════
    13. VISTA SUPER ADMIN · "Usuarios"
