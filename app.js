@@ -1077,7 +1077,7 @@ function renderAdminAlumnos() {
 
     if (state.adminAlumnoViewMode === 'list') {
       grid.insertAdjacentHTML('beforeend', `
-        <article class="alumno-card admin-alumno-card ${elimClass}" data-id="${a.id}" ${cardStyle}>
+        <article class="alumno-card admin-alumno-card ${elimClass}" data-id="${a.id}" data-baja="${a.baja ? '1' : '0'}" ${cardStyle}>
           <div style="display:flex;align-items:center;gap:6px">
             <div class="crecimiento-icon-mini">${getIconoCrecimiento(a)}</div>
             <div class="alumno-card-name">${escapeHtml(a.apellido)}, ${escapeHtml(a.nombre)}</div>
@@ -1089,7 +1089,7 @@ function renderAdminAlumnos() {
       `);
     } else {
       grid.insertAdjacentHTML('beforeend', `
-        <article class="alumno-card admin-alumno-card ${elimClass}" data-id="${a.id}" ${cardStyle}>
+        <article class="alumno-card admin-alumno-card ${elimClass}" data-id="${a.id}" data-baja="${a.baja ? '1' : '0'}" ${cardStyle}>
           ${alerta ? `<div class="card-alerta-banner">⚠️ Sin contacto hace ${dias} día${dias === 1 ? '' : 's'}</div>` : ''}
           <div class="card-top-row">
             <div class="card-top-info">
@@ -1127,6 +1127,11 @@ function renderAdminAlumnos() {
       cb.className = 'bulk-checkbox';
       card.prepend(cb);
     }
+    // Si ya estaba seleccionado antes de este re-render (ej: cambio de filtro
+    // mientras el modo selección seguía activo), reaplicar la marca visual.
+    if (bulk.active && bulk.selected.has(+card.dataset.id)) {
+      card.classList.add('bulk-selected');
+    }
     card.onclick = (e) => {
       if (bulk.active) {
         toggleBulkCard(card, +card.dataset.id);
@@ -1135,6 +1140,8 @@ function renderAdminAlumnos() {
       }
     };
   });
+
+  if (bulk.active) actualizarBloqueoTarjetas();
 }
 
 $$('#adm-filter-chips .chip').forEach(chip => {
@@ -4260,15 +4267,40 @@ $('grupo-cancel').onclick = () => $('modal-asignar-grupo').classList.add('hidden
 
 /* ═══════════════════════════════════════════════════════════════
    ACCIONES MASIVAS SOBRE ALUMNOS (admin)
-   Permite seleccionar uno, varios o todos los alumnos visibles
-   y deshabilitar (activa=false) o eliminar (eliminado=true).
+   Permite seleccionar uno, varios o todos los alumnos visibles y
+   dar de baja / habilitar / eliminar en bloque.
+
+   Regla de homogeneidad: una misma selección sólo puede contener
+   alumnos TODOS activos o TODOS de baja, nunca mezclados — porque
+   la acción "Baja"/"Habilitar" es opuesta según el estado. Al
+   seleccionar el primer alumno, los del otro grupo quedan
+   bloqueados (grisados, no clickeables) hasta vaciar la selección.
 ═══════════════════════════════════════════════════════════════ */
 
 const bulk = {
   active:  false,          // modo selección activo
   selected: new Set(),     // IDs de alumnos seleccionados
-  action:  null,           // 'disable' | 'delete'
+  action:  null,           // 'baja' | 'habilitar' | 'delete'
 };
+
+/* Determina el "modo" de la selección actual mirando el estado real
+   (data-baja) de las tarjetas seleccionadas:
+   - null        → no hay nada seleccionado
+   - 'baja'      → todos los seleccionados están ACTIVOS (la acción los pondría de baja)
+   - 'habilitar' → todos los seleccionados están DE BAJA (la acción los habilitaría) */
+function getBulkSelectionMode() {
+  if (!bulk.selected.size) return null;
+  const grid = $('admin-alumnos-grid');
+  if (!grid) return null;
+  let hayActivos = false, hayBaja = false;
+  bulk.selected.forEach(id => {
+    const card = grid.querySelector(`.alumno-card[data-id="${id}"]`);
+    if (!card) return;
+    if (card.dataset.baja === '1') hayBaja = true; else hayActivos = true;
+  });
+  if (hayBaja && !hayActivos) return 'habilitar';
+  return 'baja'; // todos activos (o mezcla imposible por la validación al seleccionar)
+}
 
 /* ── Activar/desactivar modo selección ── */
 $('btn-bulk-toggle').onclick = () => {
@@ -4284,6 +4316,7 @@ $('btn-bulk-toggle').onclick = () => {
   if (grid) grid.classList.toggle('bulk-mode', bulk.active);
 
   actualizarBulkBar();
+  actualizarBloqueoTarjetas();
 };
 
 $('btn-bulk-cancel').onclick = () => {
@@ -4294,7 +4327,10 @@ $('btn-bulk-cancel').onclick = () => {
   const grid = $('admin-alumnos-grid');
   if (grid) {
     grid.classList.remove('bulk-mode');
-    $$('.alumno-card', grid).forEach(c => c.classList.remove('bulk-selected'));
+    $$('.alumno-card', grid).forEach(c => {
+      c.classList.remove('bulk-selected');
+      c.classList.remove('bulk-locked');
+    });
   }
   actualizarBulkBar();
 };
@@ -4302,48 +4338,101 @@ $('btn-bulk-cancel').onclick = () => {
 /* ── Seleccionar / deseleccionar un alumno ── */
 function toggleBulkCard(cardEl, id) {
   if (!bulk.active) return;
+  if (cardEl.classList.contains('bulk-locked')) return; // bloqueado por homogeneidad
+
+  const cardEsBaja = cardEl.dataset.baja === '1';
+
   if (bulk.selected.has(id)) {
     bulk.selected.delete(id);
     cardEl.classList.remove('bulk-selected');
   } else {
+    // Validar homogeneidad: no se puede mezclar activos con de baja
+    const modoActual = getBulkSelectionMode(); // null | 'baja' | 'habilitar'
+    if (modoActual === 'baja' && cardEsBaja) {
+      toast('No podés mezclar alumnos activos y de baja en la misma selección', 'error');
+      return;
+    }
+    if (modoActual === 'habilitar' && !cardEsBaja) {
+      toast('No podés mezclar alumnos activos y de baja en la misma selección', 'error');
+      return;
+    }
     bulk.selected.add(id);
     cardEl.classList.add('bulk-selected');
   }
   actualizarBulkBar();
+  actualizarBloqueoTarjetas();
+}
+
+/* Grisa y bloquea las tarjetas del grupo opuesto al de la selección
+   actual, para que sea imposible tocarlas mientras haya algo
+   seleccionado del otro estado. */
+function actualizarBloqueoTarjetas() {
+  const grid = $('admin-alumnos-grid');
+  if (!grid) return;
+  const modo = getBulkSelectionMode(); // null | 'baja' | 'habilitar'
+
+  $$('.alumno-card:not(.is-eliminado)', grid).forEach(card => {
+    const esBaja = card.dataset.baja === '1';
+    const id = +card.dataset.id;
+    let bloquear = false;
+    if (modo === 'baja')      bloquear = esBaja;   // selección = activos → bloquear los de baja
+    if (modo === 'habilitar') bloquear = !esBaja;  // selección = de baja → bloquear los activos
+    card.classList.toggle('bulk-locked', bloquear && !bulk.selected.has(id));
+  });
 }
 
 /* ── Seleccionar todos ── */
 $('bulk-select-all').onclick = () => {
   const grid = $('admin-alumnos-grid');
   if (!grid) return;
-  const cards = $$('.alumno-card:not(.is-eliminado)', grid);
+
+  // "Seleccionar todos" respeta la homogeneidad: si ya hay algo
+  // seleccionado, sólo suma los del mismo grupo (activos o de baja).
+  const modo = getBulkSelectionMode();
+  let cards = $$('.alumno-card:not(.is-eliminado)', grid);
+  if (modo === 'baja')      cards = cards.filter(c => c.dataset.baja !== '1');
+  if (modo === 'habilitar') cards = cards.filter(c => c.dataset.baja === '1');
+
   const todosSeleccionados = cards.every(c => bulk.selected.has(+c.dataset.id));
 
   if (todosSeleccionados) {
-    // Deseleccionar todos
     cards.forEach(c => { bulk.selected.delete(+c.dataset.id); c.classList.remove('bulk-selected'); });
     $('bulk-select-all').textContent = 'Seleccionar todos';
   } else {
-    // Seleccionar todos
     cards.forEach(c => { bulk.selected.add(+c.dataset.id); c.classList.add('bulk-selected'); });
     $('bulk-select-all').textContent = 'Deseleccionar todos';
   }
   actualizarBulkBar();
+  actualizarBloqueoTarjetas();
 };
 
-/* ── Actualizar la barra y el contador ── */
+/* ── Actualizar la barra, el contador y el botón dinámico Baja/Habilitar ── */
 function actualizarBulkBar() {
   const n = bulk.selected.size;
   $('bulk-bar').classList.toggle('hidden', !bulk.active);
   $('bulk-count').textContent = `${n} alumno${n !== 1 ? 's' : ''} seleccionado${n !== 1 ? 's' : ''}`;
 
-  // Habilitar/deshabilitar botones de acción
-  $('btn-bulk-disable').disabled = n === 0;
-  $('btn-bulk-delete').disabled  = n === 0;
+  // El botón cambia de "Baja" a "Habilitar" según qué tipo de
+  // alumnos hay seleccionados en este momento.
+  const modo = getBulkSelectionMode(); // null | 'baja' | 'habilitar'
+  const btnBaja = $('btn-bulk-disable');
+  if (modo === 'habilitar') {
+    btnBaja.classList.add('btn-bulk-habilitar-mode');
+    btnBaja.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg> Habilitar`;
+  } else {
+    btnBaja.classList.remove('btn-bulk-habilitar-mode');
+    btnBaja.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg> Baja`;
+  }
+
+  btnBaja.disabled = n === 0;
+  $('btn-bulk-delete').disabled = n === 0;
 }
 
 /* ── Abrir modal de confirmación ── */
-$('btn-bulk-disable').onclick = () => abrirBulkConfirm('disable');
+$('btn-bulk-disable').onclick = () => {
+  const modo = getBulkSelectionMode(); // 'baja' o 'habilitar' según la selección actual
+  abrirBulkConfirm(modo === 'habilitar' ? 'habilitar' : 'baja');
+};
 $('btn-bulk-delete').onclick  = () => abrirBulkConfirm('delete');
 
 function abrirBulkConfirm(action) {
@@ -4351,14 +4440,19 @@ function abrirBulkConfirm(action) {
   bulk.action = action;
   const n = bulk.selected.size;
   const isDelete = action === 'delete';
+  const isHabilitar = action === 'habilitar';
 
   $('bulk-confirm-title').textContent = isDelete
     ? `Eliminar ${n} alumno${n > 1 ? 's' : ''}`
-    : `Dar de baja ${n} alumno${n > 1 ? 's' : ''}`;
+    : isHabilitar
+      ? `Habilitar ${n} alumno${n > 1 ? 's' : ''}`
+      : `Dar de baja ${n} alumno${n > 1 ? 's' : ''}`;
 
   $('bulk-confirm-desc').innerHTML = isDelete
     ? `Esta acción <strong>no tiene vuelta atrás fácil</strong>. Los ${n} alumno${n > 1 ? 's' : ''} seleccionado${n > 1 ? 's' : ''} quedar${n > 1 ? 'á' : 'án'} eliminado${n > 1 ? 's' : ''} y dejar${n > 1 ? 'án' : 'á'} de aparecer en los listados de todos los mentores.`
-    : `Los ${n} alumno${n > 1 ? 's' : ''} seleccionado${n > 1 ? 's' : ''} quedar${n > 1 ? 'án' : 'á'} marcado${n > 1 ? 's' : ''} como <strong>de baja</strong>. Van a seguir viéndose en el listado del mentor (marcados como de baja) y en el filtro "Bajas". Podés habilitarlo${n > 1 ? 's' : ''} de nuevo entrando a su ficha, sin perder ningún dato cargado.`;
+    : isHabilitar
+      ? `Los ${n} alumno${n > 1 ? 's' : ''} seleccionado${n > 1 ? 's' : ''} vuelven a estar activos, sin perder ningún dato cargado.`
+      : `Los ${n} alumno${n > 1 ? 's' : ''} seleccionado${n > 1 ? 's' : ''} quedar${n > 1 ? 'án' : 'á'} marcado${n > 1 ? 's' : ''} como <strong>de baja</strong>. Van a seguir viéndose en el listado del mentor (marcados como de baja) y en el filtro "Bajas". Podés habilitarlo${n > 1 ? 's' : ''} de nuevo más adelante, sin perder ningún dato cargado.`;
 
   // La palabra ELIMINAR solo se pide para borrado
   $('bulk-confirm-word-wrap').classList.toggle('hidden', !isDelete);
@@ -4368,8 +4462,8 @@ function abrirBulkConfirm(action) {
   }
 
   $('bulk-confirm-error').classList.add('hidden');
-  $('bulk-confirm-ok').style.background = isDelete ? '#B85450' : '#C4825A';
-  $('bulk-confirm-ok').textContent = isDelete ? 'Sí, eliminar' : 'Sí, dar de baja';
+  $('bulk-confirm-ok').style.background = isDelete ? '#B85450' : (isHabilitar ? '#6B9A64' : '#C4825A');
+  $('bulk-confirm-ok').textContent = isDelete ? 'Sí, eliminar' : (isHabilitar ? 'Sí, habilitar' : 'Sí, dar de baja');
   $('modal-bulk-confirm').classList.remove('hidden');
 }
 
@@ -4383,7 +4477,8 @@ $('bulk-confirm-word').addEventListener('keydown', e => {
 
 /* ── Ejecutar la acción masiva ── */
 $('bulk-confirm-ok').onclick = async () => {
-  const isDelete = bulk.action === 'delete';
+  const isDelete     = bulk.action === 'delete';
+  const isHabilitar  = bulk.action === 'habilitar';
   const err = $('bulk-confirm-error');
   err.classList.add('hidden');
 
@@ -4405,14 +4500,16 @@ $('bulk-confirm-ok').onclick = async () => {
 
   const payload = isDelete
     ? { eliminado: true, mentor_id: null }
-    : { baja: true };
+    : isHabilitar
+      ? { baja: false }
+      : { baja: true };
 
   const { error } = await db.from('alumnos')
     .update(payload)
     .in('id', ids);
 
   btn.disabled = false;
-  btn.textContent = isDelete ? 'Sí, eliminar' : 'Sí, dar de baja';
+  btn.textContent = isDelete ? 'Sí, eliminar' : (isHabilitar ? 'Sí, habilitar' : 'Sí, dar de baja');
 
   if (error) {
     console.error('bulk action:', error);
@@ -4426,7 +4523,9 @@ $('bulk-confirm-ok').onclick = async () => {
   const n = ids.length;
   toast(isDelete
     ? `✓ ${n} alumno${n > 1 ? 's' : ''} eliminado${n > 1 ? 's' : ''}`
-    : `✓ ${n} alumno${n > 1 ? 's' : ''} dado${n > 1 ? 's' : ''} de baja`
+    : isHabilitar
+      ? `✓ ${n} alumno${n > 1 ? 's' : ''} habilitado${n > 1 ? 's' : ''}`
+      : `✓ ${n} alumno${n > 1 ? 's' : ''} dado${n > 1 ? 's' : ''} de baja`
   );
 
   // Salir del modo selección y refrescar

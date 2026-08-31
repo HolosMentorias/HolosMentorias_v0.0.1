@@ -4879,3 +4879,27 @@ input:checked + .switch-track-video { background: #3B82F6; }
 }
 .btn-outline-habilitar:hover { background: #EFF6ED; }
 
+
+
+/* ═══════════════════════════════════════════════════════════════
+   HOLOS · Selección masiva homogénea (activos vs. de baja)
+═══════════════════════════════════════════════════════════════ */
+
+/* Tarjetas del grupo opuesto al de la selección actual: grisadas
+   y no clickeables, para que sea imposible mezclar activos con
+   alumnos de baja en la misma selección masiva. */
+.bulk-mode .alumno-card.bulk-locked {
+  opacity: .35;
+  filter: grayscale(.6);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Botón "Baja" cambia visualmente a modo "Habilitar" (verde) cuando
+   la selección actual son todos alumnos de baja. */
+.btn-bulk-disable.btn-bulk-habilitar-mode {
+  background: #6B9A64;
+  color: white;
+}
+.btn-bulk-disable.btn-bulk-habilitar-mode:hover { background: #5C8956; }
+
