@@ -4840,17 +4840,19 @@ input:checked + .switch-track-video { background: #3B82F6; }
 
 
 /* ═══════════════════════════════════════════════════════════════
-   HOLOS · Botón "Baja" individual en la ficha del alumno (admin)
-   Mismo estilo que el botón de baja de la barra de selección masiva.
+   HOLOS · Botones "Baja" / "Habilitar" individuales en la ficha
+   del alumno (admin). Mismo box-model exacto que .btn-danger y
+   .btn-secondary (padding 13px 24px, .95rem, weight 600) para que
+   los tres botones (Baja/Habilitar/Eliminar) midan siempre igual.
 ═══════════════════════════════════════════════════════════════ */
 .btn-warn-baja {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 9px 16px;
+  padding: 13px 24px;
   border-radius: var(--radius-sm);
   font-family: var(--font-body);
-  font-size: 13px;
+  font-size: .95rem;
   font-weight: 600;
   cursor: pointer;
   border: none;
@@ -4859,4 +4861,21 @@ input:checked + .switch-track-video { background: #3B82F6; }
   transition: var(--transition);
 }
 .btn-warn-baja:hover { background: #F0D060; }
+
+.btn-outline-habilitar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 13px 24px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: .95rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  border: 1.5px solid #6B9A64;
+  color: #4A7A44;
+  transition: var(--transition);
+}
+.btn-outline-habilitar:hover { background: #EFF6ED; }
 
