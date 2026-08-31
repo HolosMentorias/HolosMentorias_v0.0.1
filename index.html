@@ -869,17 +869,6 @@
           </div>
         </div>
 
-        <div class="switch-row">
-          <div class="switch-info">
-            <span class="switch-label">Mentoría activa</span>
-            <span class="switch-desc">El alumno continúa en proceso</span>
-          </div>
-          <label class="switch">
-            <input type="checkbox" id="form-activa" />
-            <span class="switch-track"><span class="switch-thumb"></span></span>
-          </label>
-        </div>
-
         <div class="form-section-title">Inquietudes del alumno</div>
         <div class="form-group">
           <textarea id="form-inquietudes" rows="3" placeholder="Preocupaciones, dudas..."></textarea>
@@ -895,6 +884,10 @@
           Eliminar
         </button>
         <button class="btn-secondary hidden" id="btn-restaurar-alumno">Restaurar</button>
+        <button class="btn-secondary hidden" id="btn-habilitar-alumno" style="border-color:#6B9A64;color:#4A7A44">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
+          Habilitar
+        </button>
         <div style="flex:1"></div>
         <button class="btn-secondary" id="btn-cancel">Cancelar</button>
         <button class="btn-primary" id="btn-save">Guardar</button>
@@ -1291,7 +1284,7 @@
       <div class="bulk-bar-actions">
         <button class="btn-bulk-action btn-bulk-disable" id="btn-bulk-disable">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-          Deshabilitar
+          Baja
         </button>
         <button class="btn-bulk-action btn-bulk-delete" id="btn-bulk-delete">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14a2,2,0,0,1-2,2H8a2,2,0,0,1-2-2L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4a1,1,0,0,1,1-1h4a1,1,0,0,1,1,1V6"/></svg>
@@ -1433,7 +1426,7 @@
 
   <!-- Footer de versión: fuera de todas las screens para que position:fixed funcione -->
   <footer class="app-version-footer">
-    Holos Mentorías · <span>v0.0.28</span>
+    Holos Mentorías · <span>v0.0.29</span>
   </footer>
 
   <!-- Config (inyectada por Cloudflare en build, ver README) -->

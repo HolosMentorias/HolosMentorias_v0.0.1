@@ -779,7 +779,9 @@ function renderMentorAlumnos() {
   if (f === 'respondio-si')  list = list.filter(a => a.respondio === 'Sí' && !a.baja);
   if (f === 'respondio-no')  list = list.filter(a => a.respondio === 'No' && !a.baja);
   if (f === 'baja')          list = list.filter(a => a.baja);
-  if (f === 'all')           list = list.filter(a => !a.baja);
+  // "Todos" incluye a los alumnos de baja (visibles pero marcados),
+  // no los oculta — solo el resto de filtros específicos los excluye.
+  if (f === 'all')           { /* sin filtro adicional: se ven todos */ }
 
   // Búsqueda
   if (state.mentorSearch) {
@@ -987,7 +989,8 @@ function renderAdminAlumnos() {
     if (f === 'asignados')   list = list.filter(a => a.mentor_id && !a.baja);
     if (f === 'sin-asignar') list = list.filter(a => !a.mentor_id && !a.baja);
     if (f === 'baja')        list = list.filter(a => a.baja);
-    if (f === 'all')         list = list.filter(a => !a.baja);
+    // "Todos" incluye a los alumnos de baja (visibles pero marcados)
+    if (f === 'all')         { /* sin filtro adicional */ }
   }
 
   // Filtro adicional por mentor
@@ -1190,9 +1193,10 @@ function openAlumnoForm(alumnoId) {
   });
   $('form-mentor-wrap').style.display = isAdmin ? '' : 'none';
 
-  // Reset de botones eliminar/restaurar
+  // Reset de botones eliminar/restaurar/habilitar
   $('btn-eliminar-alumno').classList.add('hidden');
   $('btn-restaurar-alumno').classList.add('hidden');
+  $('btn-habilitar-alumno').classList.add('hidden');
 
   let estaEliminado = false;
   if (alumnoId) {
@@ -1216,21 +1220,27 @@ function openAlumnoForm(alumnoId) {
     $('form-fecha-ultimo').value= a.fecha_ultimo || '';
     $('form-respondio').value   = a.respondio || '';
     $('form-tipo-contacto').value = a.tipo_contacto || '';
-    $('form-activa').checked    = !!a.activa;
     $('form-inquietudes').value = a.inquietudes || '';
     $('form-seguimiento').value = a.seguimiento || '';
     if (isAdmin) $('form-mentor').value = a.mentor_id || '';
 
     // Botones de eliminar/restaurar — sólo para admin
-    if (isAdmin) {
-      if (estaEliminado) {
-        $('btn-restaurar-alumno').classList.remove('hidden');
-        $('btn-restaurar-alumno').dataset.id = a.id;
+    if (isAdmin && !estaEliminado) {
+      if (a.baja) {
+        $('btn-habilitar-alumno').classList.remove('hidden');
+        $('btn-habilitar-alumno').dataset.id = a.id;
       } else {
         $('btn-eliminar-alumno').classList.remove('hidden');
         $('btn-eliminar-alumno').dataset.id = a.id;
         $('btn-eliminar-alumno').dataset.name = `${a.nombre} ${a.apellido}`;
       }
+    } else if (isAdmin && estaEliminado) {
+      $('btn-restaurar-alumno').classList.remove('hidden');
+      $('btn-restaurar-alumno').dataset.id = a.id;
+    } else if (isMentor && a.baja && !estaEliminado) {
+      // El mentor también puede reactivar a su propio alumno de baja
+      $('btn-habilitar-alumno').classList.remove('hidden');
+      $('btn-habilitar-alumno').dataset.id = a.id;
     }
   } else {
     $('modal-title').textContent = 'Nuevo alumno';
@@ -1239,7 +1249,6 @@ function openAlumnoForm(alumnoId) {
      'form-fecha-primer','form-fecha-ultimo','form-respondio',
      'form-tipo-contacto','form-inquietudes','form-seguimiento']
       .forEach(id => $(id).value = '');
-    $('form-activa').checked = true;
     $('form-mentor').value = '';
   }
 
@@ -1272,7 +1281,6 @@ $('btn-save').onclick = async () => {
     fecha_ultimo:    $('form-fecha-ultimo').value      || null,
     respondio:       $('form-respondio').value         || null,
     tipo_contacto:   $('form-tipo-contacto').value     || null,
-    activa:          $('form-activa').checked,
     inquietudes:     $('form-inquietudes').value       || null,
     seguimiento:     $('form-seguimiento').value       || null,
   };
@@ -1394,6 +1402,33 @@ $('btn-restaurar-alumno').onclick = async () => {
   toast('Alumno restaurado ✓');
   $('modal-form').classList.add('hidden');
   if (state.currentView === 'admin-alumnos') loadAdminAlumnos();
+};
+
+/* ─── HABILITAR alumno de baja (admin o mentor) ───
+   Solo cambia el campo "baja" a false. No toca ningún otro dato:
+   toda la info que el mentor ya cargó en la ficha se conserva tal
+   cual estaba. */
+
+$('btn-habilitar-alumno').onclick = async () => {
+  const id = $('btn-habilitar-alumno').dataset.id;
+  if (!confirm('¿Habilitar este alumno nuevamente? Vuelve a estar activo, sin perder ningún dato cargado.')) return;
+
+  const btn = $('btn-habilitar-alumno');
+  btn.disabled = true; btn.textContent = 'Habilitando...';
+  const { error } = await db.from('alumnos').update({ baja: false }).eq('id', id);
+  btn.disabled = false;
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg> Habilitar';
+
+  if (error) {
+    console.error('habilitar alumno:', error);
+    toast('Error: ' + error.message, 'error');
+    return;
+  }
+
+  toast('Alumno habilitado ✓');
+  $('modal-form').classList.add('hidden');
+  if (state.currentView === 'admin-alumnos')  loadAdminAlumnos();
+  if (state.currentView === 'mentor-alumnos') loadMentorAlumnos();
 };
 
 /* ═══════════════════════════════════════════════════════════════
@@ -4157,11 +4192,11 @@ function abrirBulkConfirm(action) {
 
   $('bulk-confirm-title').textContent = isDelete
     ? `Eliminar ${n} alumno${n > 1 ? 's' : ''}`
-    : `Deshabilitar ${n} alumno${n > 1 ? 's' : ''}`;
+    : `Dar de baja ${n} alumno${n > 1 ? 's' : ''}`;
 
   $('bulk-confirm-desc').innerHTML = isDelete
     ? `Esta acción <strong>no tiene vuelta atrás fácil</strong>. Los ${n} alumno${n > 1 ? 's' : ''} seleccionado${n > 1 ? 's' : ''} quedar${n > 1 ? 'á' : 'án'} eliminado${n > 1 ? 's' : ''} y dejar${n > 1 ? 'án' : 'á'} de aparecer en los listados de todos los mentores.`
-    : `Los ${n} alumno${n > 1 ? 's' : ''} seleccionado${n > 1 ? 's' : ''} quedar${n > 1 ? 'án' : 'á'} deshabilitado${n > 1 ? 's' : ''}. Dejar${n > 1 ? 'án' : 'á'} de aparecer en los listados pero podrás reactivarlo${n > 1 ? 's' : ''} más adelante.`;
+    : `Los ${n} alumno${n > 1 ? 's' : ''} seleccionado${n > 1 ? 's' : ''} quedar${n > 1 ? 'án' : 'á'} marcado${n > 1 ? 's' : ''} como <strong>de baja</strong>. Van a seguir viéndose en el listado del mentor (marcados como de baja) y en el filtro "Bajas". Podés habilitarlo${n > 1 ? 's' : ''} de nuevo entrando a su ficha, sin perder ningún dato cargado.`;
 
   // La palabra ELIMINAR solo se pide para borrado
   $('bulk-confirm-word-wrap').classList.toggle('hidden', !isDelete);
@@ -4172,7 +4207,7 @@ function abrirBulkConfirm(action) {
 
   $('bulk-confirm-error').classList.add('hidden');
   $('bulk-confirm-ok').style.background = isDelete ? '#B85450' : '#C4825A';
-  $('bulk-confirm-ok').textContent = isDelete ? 'Sí, eliminar' : 'Sí, deshabilitar';
+  $('bulk-confirm-ok').textContent = isDelete ? 'Sí, eliminar' : 'Sí, dar de baja';
   $('modal-bulk-confirm').classList.remove('hidden');
 }
 
@@ -4208,14 +4243,14 @@ $('bulk-confirm-ok').onclick = async () => {
 
   const payload = isDelete
     ? { eliminado: true, mentor_id: null }
-    : { activa: false };
+    : { baja: true };
 
   const { error } = await db.from('alumnos')
     .update(payload)
     .in('id', ids);
 
   btn.disabled = false;
-  btn.textContent = isDelete ? 'Sí, eliminar' : 'Sí, deshabilitar';
+  btn.textContent = isDelete ? 'Sí, eliminar' : 'Sí, dar de baja';
 
   if (error) {
     console.error('bulk action:', error);
@@ -4229,7 +4264,7 @@ $('bulk-confirm-ok').onclick = async () => {
   const n = ids.length;
   toast(isDelete
     ? `✓ ${n} alumno${n > 1 ? 's' : ''} eliminado${n > 1 ? 's' : ''}`
-    : `✓ ${n} alumno${n > 1 ? 's' : ''} deshabilitado${n > 1 ? 's' : ''}`
+    : `✓ ${n} alumno${n > 1 ? 's' : ''} dado${n > 1 ? 's' : ''} de baja`
   );
 
   // Salir del modo selección y refrescar
