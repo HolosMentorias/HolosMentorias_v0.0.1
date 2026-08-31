@@ -1197,6 +1197,7 @@ function openAlumnoForm(alumnoId) {
   $('btn-eliminar-alumno').classList.add('hidden');
   $('btn-restaurar-alumno').classList.add('hidden');
   $('btn-habilitar-alumno').classList.add('hidden');
+  $('btn-baja-alumno').classList.add('hidden');
 
   let estaEliminado = false;
   if (alumnoId) {
@@ -1224,12 +1225,21 @@ function openAlumnoForm(alumnoId) {
     $('form-seguimiento').value = a.seguimiento || '';
     if (isAdmin) $('form-mentor').value = a.mentor_id || '';
 
-    // Botones de eliminar/restaurar — sólo para admin
+    // Botones de baja/eliminar/restaurar/habilitar — sólo para admin.
+    // Siguen el mismo criterio que la barra de selección masiva:
+    // "Baja" y "Eliminar" van siempre juntos, uno al lado del otro.
     if (isAdmin && !estaEliminado) {
       if (a.baja) {
+        // Ya está de baja: mostrar "Habilitar" (para reactivar) + "Eliminar" juntos
         $('btn-habilitar-alumno').classList.remove('hidden');
         $('btn-habilitar-alumno').dataset.id = a.id;
+        $('btn-eliminar-alumno').classList.remove('hidden');
+        $('btn-eliminar-alumno').dataset.id = a.id;
+        $('btn-eliminar-alumno').dataset.name = `${a.nombre} ${a.apellido}`;
       } else {
+        // Activo: mostrar "Baja" + "Eliminar" juntos
+        $('btn-baja-alumno').classList.remove('hidden');
+        $('btn-baja-alumno').dataset.id = a.id;
         $('btn-eliminar-alumno').classList.remove('hidden');
         $('btn-eliminar-alumno').dataset.id = a.id;
         $('btn-eliminar-alumno').dataset.name = `${a.nombre} ${a.apellido}`;
@@ -1238,8 +1248,8 @@ function openAlumnoForm(alumnoId) {
       $('btn-restaurar-alumno').classList.remove('hidden');
       $('btn-restaurar-alumno').dataset.id = a.id;
     }
-    // El botón "Habilitar" es exclusivo de admin/super_admin.
-    // Los mentores nunca pueden reactivar un alumno de baja.
+    // "Baja" y "Habilitar" son exclusivos de admin/super_admin.
+    // Los mentores nunca pueden dar de baja ni reactivar un alumno.
   } else {
     $('modal-title').textContent = 'Nuevo alumno';
     ['form-nombre','form-apellido','form-numero-alumno','form-situacion',
@@ -1417,7 +1427,7 @@ $('btn-restaurar-alumno').onclick = async () => {
   if (state.currentView === 'admin-alumnos') loadAdminAlumnos();
 };
 
-/* ─── HABILITAR alumno de baja (admin o mentor) ───
+/* ─── HABILITAR alumno de baja (solo admin/super_admin) ───
    Solo cambia el campo "baja" a false. No toca ningún otro dato:
    toda la info que el mentor ya cargó en la ficha se conserva tal
    cual estaba. */
@@ -1442,6 +1452,33 @@ $('btn-habilitar-alumno').onclick = async () => {
   $('modal-form').classList.add('hidden');
   if (state.currentView === 'admin-alumnos')  loadAdminAlumnos();
   if (state.currentView === 'mentor-alumnos') loadMentorAlumnos();
+};
+
+/* ─── DAR DE BAJA a un alumno individual (solo admin/super_admin) ───
+   Solo cambia el campo "baja" a true. El alumno sigue existiendo
+   con toda su info, sigue viéndose (marcado como de baja) tanto
+   en "Todos" como en el filtro "Bajas", y se puede reactivar
+   después con el botón "Habilitar" sin perder ningún dato. */
+
+$('btn-baja-alumno').onclick = async () => {
+  const id = $('btn-baja-alumno').dataset.id;
+  if (!confirm('¿Dar de baja a este alumno? Va a quedar marcado como de baja y va a dejar de contar como activo, pero podés habilitarlo de nuevo cuando quieras.')) return;
+
+  const btn = $('btn-baja-alumno');
+  btn.disabled = true; btn.textContent = 'Aplicando...';
+  const { error } = await db.from('alumnos').update({ baja: true }).eq('id', id);
+  btn.disabled = false;
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg> Baja';
+
+  if (error) {
+    console.error('dar de baja alumno:', error);
+    toast('Error: ' + error.message, 'error');
+    return;
+  }
+
+  toast('Alumno dado de baja ✓');
+  $('modal-form').classList.add('hidden');
+  if (state.currentView === 'admin-alumnos') loadAdminAlumnos();
 };
 
 /* ═══════════════════════════════════════════════════════════════

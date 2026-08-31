@@ -4837,3 +4837,26 @@ input:checked + .switch-track-video { background: #3B82F6; }
   color: #B85450;
 }
 
+
+
+/* ═══════════════════════════════════════════════════════════════
+   HOLOS · Botón "Baja" individual en la ficha del alumno (admin)
+   Mismo estilo que el botón de baja de la barra de selección masiva.
+═══════════════════════════════════════════════════════════════ */
+.btn-warn-baja {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  background: #E8C84A;
+  color: #4A3800;
+  transition: var(--transition);
+}
+.btn-warn-baja:hover { background: #F0D060; }
+
